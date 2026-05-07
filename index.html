@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>目隠し将棋</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', serif;
+            background: #b89060;
+            background-image: radial-gradient(ellipse at 30% 20%, #c8a878, #a87848);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px 16px;
+        }
+
+        h1 {
+            color: #1a0c00;
+            font-size: 30px;
+            letter-spacing: 6px;
+            margin-bottom: 4px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.25);
+        }
+
+        .subtitle {
+            color: #5a3818;
+            font-size: 13px;
+            margin-bottom: 22px;
+            letter-spacing: 2px;
+        }
+
+        /* ── レイアウト ── */
+        .game-area {
+            display: flex;
+            gap: 18px;
+            align-items: stretch;
+        }
+
+        .sente-hand-wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        .gote-hand-wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .board-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ── プレイヤーラベル ── */
+        .player-tag {
+            background: #2e1406;
+            color: #f0ddb0;
+            padding: 5px 28px;
+            border-radius: 4px;
+            font-size: 13px;
+            letter-spacing: 3px;
+        }
+
+        /* ── 盤面レイアウト ── */
+        .board-layout {
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .row-nums {
+            display: flex;
+            flex-direction: column;
+            padding-left: 5px;
+            padding-top: 3px;
+        }
+
+        .row-nums .lbl {
+            height: 62px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            font-size: 11px;
+            color: #2e1406;
+            font-weight: bold;
+        }
+
+        .board-col-wrap {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .col-nums {
+            display: flex;
+            padding-left: 3px;
+            margin-bottom: 2px;
+        }
+
+        .col-nums .lbl {
+            width: 62px;
+            text-align: center;
+            font-size: 11px;
+            color: #2e1406;
+            font-weight: bold;
+        }
+
+        /* ── 盤面テーブル ── */
+        #shogi-board {
+            border-collapse: collapse;
+            border: 3px solid #2e1406;
+            background: #e8b84a;
+            background-image:
+                linear-gradient(rgba(220,160,50,0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(220,160,50,0.3) 1px, transparent 1px);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.55), inset 0 0 80px rgba(160,100,20,0.15);
+        }
+
+        #shogi-board td {
+            width: 62px;
+            height: 62px;
+            border: 1px solid #9a7020;
+            text-align: center;
+            vertical-align: middle;
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.1s;
+        }
+
+        #shogi-board td:hover {
+            background-color: rgba(255,230,60,0.3);
+        }
+
+        #shogi-board td.selected {
+            background-color: rgba(60,160,255,0.4) !important;
+        }
+
+        #shogi-board td.movable::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: rgba(60,210,60,0.7);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        #shogi-board td.capturable {
+            background-color: rgba(255,70,70,0.35) !important;
+        }
+
+        /* ── 駒 ── */
+        .piece-slot {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* clip-path 外にドロップシャドウを出すため wrapper でフィルター */
+        .piece-filter {
+            filter: drop-shadow(0.8px 1.2px 0px #4a2808) drop-shadow(-0.4px 0px 0px #4a2808);
+        }
+
+        .piece {
+            width: 50px;
+            height: 54px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 21px;
+            font-weight: bold;
+            color: #120600;
+            background: #f4e09a;
+            user-select: none;
+        }
+
+        .piece.sente {
+            clip-path: polygon(50% 3%, 97% 26%, 97% 97%, 3% 97%, 3% 26%);
+        }
+
+        .piece.gote {
+            clip-path: polygon(3% 3%, 97% 3%, 97% 74%, 50% 97%, 3% 74%);
+        }
+
+        .piece.promoted {
+            color: #cc1100;
+            background: #f4e09a;
+        }
+
+        .piece.gote .piece-text {
+            display: inline-block;
+            transform: rotate(180deg);
+        }
+
+        /* ── 持ち駒エリア ── */
+        .hand {
+            background: #d4a84a;
+            background-image: linear-gradient(160deg, #ddb84e, #c89840);
+            border: 2px solid #6a3a10;
+            border-radius: 8px;
+            padding: 10px 12px;
+            min-width: 108px;
+            min-height: 200px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+        }
+
+        .hand h3 {
+            font-size: 12px;
+            color: #2e1406;
+            text-align: center;
+            border-bottom: 1px solid #8a5420;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .hand-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .hand-piece-item {
+            position: relative;
+            width: 40px;
+            height: 44px;
+            background: #f4e09a;
+            border: 1px solid #8a5420;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            font-weight: bold;
+            color: #120600;
+            cursor: pointer;
+            transition: background-color 0.1s;
+        }
+
+        .hand-piece-item:hover {
+            background-color: #fff4c0;
+        }
+
+        .hand-piece-item.selected-hand {
+            background: #ffe060;
+            border-color: #cc8800;
+        }
+
+        .hand-piece-item .cnt {
+            position: absolute;
+            bottom: 1px;
+            right: 3px;
+            font-size: 9px;
+            color: #555;
+        }
+
+        /* ── 音声操作バー ── */
+        .voice-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 20px;
+            background: #1e0e04;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+            width: 100%;
+            max-width: 640px;
+        }
+
+        #mic-btn {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            border: 3px solid #6a3a10;
+            background: #4a2008;
+            color: #f0ddb0;
+            font-size: 22px;
+            cursor: pointer;
+            flex-shrink: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #mic-btn:hover { background: #6a3010; }
+
+        #mic-btn.active {
+            background: #cc2200;
+            border-color: #ff5533;
+            animation: mic-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes mic-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(204,34,0,0.5); }
+            50%       { box-shadow: 0 0 0 12px rgba(204,34,0,0); }
+        }
+
+        .voice-info { flex: 1; min-width: 0; }
+
+        #voice-label {
+            font-size: 11px;
+            color: #806040;
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+
+        #voice-text {
+            font-size: 18px;
+            font-weight: bold;
+            color: #f0ddb0;
+            min-height: 26px;
+            letter-spacing: 2px;
+            word-break: break-all;
+            transition: opacity 0.15s;
+        }
+
+        .voice-manual {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        #voice-input {
+            flex: 1;
+            background: #3a1e0a;
+            border: 1px solid #6a3a10;
+            border-radius: 4px;
+            color: #f0ddb0;
+            font-size: 14px;
+            font-family: inherit;
+            padding: 4px 8px;
+            outline: none;
+        }
+
+        #voice-input::placeholder { color: #705030; }
+        #voice-input:focus { border-color: #aa6030; }
+
+        #voice-input-btn {
+            background: #4a2808;
+            color: #f0ddb0;
+            border: 1px solid #6a3a10;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        #voice-input-btn:hover { background: #6a3010; }
+
+        /* ── 手番表示 ── */
+        .turn-indicator {
+            background: #2e1406;
+            color: #f0ddb0;
+            padding: 6px 32px;
+            border-radius: 4px;
+            font-size: 15px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        }
+
+        /* ── 目隠しモードボタン ── */
+        #blind-toggle {
+            background: #2e1406;
+            color: #a09070;
+            border: 2px solid #4a2808;
+            border-radius: 6px;
+            padding: 6px 20px;
+            font-size: 13px;
+            font-family: inherit;
+            letter-spacing: 2px;
+            cursor: pointer;
+            margin-bottom: 10px;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        #blind-toggle:hover { background: #4a2010; color: #f0ddb0; }
+        #blind-toggle.blind-on {
+            background: #6b0000;
+            border-color: #cc2200;
+            color: #ffd0c0;
+        }
+
+        /* 目隠しモード中の持ち駒エリア（後手） */
+        .hand.hidden-hand .hand-grid::after {
+            content: '（非表示）';
+            font-size: 11px;
+            color: #8a6040;
+            letter-spacing: 1px;
+        }
+
+        /* ── 王手バナー ── */
+        #check-banner {
+            display: none;
+            background: #cc2200;
+            color: #fff;
+            font-size: 17px;
+            font-weight: bold;
+            padding: 5px 28px;
+            border-radius: 4px;
+            letter-spacing: 4px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 8px rgba(204,34,0,0.5);
+            animation: check-flash 0.4s ease;
+        }
+        @keyframes check-flash {
+            0%   { opacity: 0; transform: scale(1.15); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* ── 棋譜パネル ── */
+        .kifu-wrapper {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-self: stretch;
+        }
+        .kifu-panel {
+            background: #d4a84a;
+            background-image: linear-gradient(160deg, #ddb84e, #c89840);
+            border: 2px solid #6a3a10;
+            border-radius: 8px;
+            padding: 10px 8px;
+            width: 110px;
+            height: 100%;
+            max-height: 620px;
+            overflow-y: auto;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+            box-sizing: border-box;
+        }
+        .kifu-panel h3 {
+            font-size: 12px;
+            color: #2e1406;
+            text-align: center;
+            border-bottom: 1px solid #8a5420;
+            padding-bottom: 5px;
+            margin-bottom: 6px;
+            letter-spacing: 1px;
+        }
+        .kifu-entry {
+            font-size: 11px;
+            color: #1a0800;
+            padding: 2px 2px;
+            border-bottom: 1px solid rgba(90,40,0,0.12);
+            white-space: nowrap;
+        }
+        .kifu-entry.gote { color: #6a1800; }
+
+        /* ── ゲームオーバーオーバーレイ ── */
+        #gameover-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+        #gameover-box {
+            background: #2e1406;
+            border: 3px solid #c89840;
+            border-radius: 14px;
+            padding: 48px 64px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+        }
+        #gameover-text {
+            color: #f0ddb0;
+            font-size: 30px;
+            font-weight: bold;
+            letter-spacing: 5px;
+            margin-bottom: 28px;
+        }
+        #replay-btn {
+            background: #c89840;
+            color: #1a0c00;
+            border: none;
+            border-radius: 6px;
+            padding: 11px 36px;
+            font-size: 17px;
+            font-family: inherit;
+            font-weight: bold;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #replay-btn:hover { background: #e8b850; }
+    </style>
+</head>
+<body>
+    <h1>目隠し将棋</h1>
+    <button id="blind-toggle">目隠しモード OFF</button>
+    <div class="turn-indicator" id="turn-indicator">先手番</div>
+    <div id="check-banner">王手！</div>
+
+    <div class="game-area">
+
+        <!-- 後手の持ち駒（左上） -->
+        <div class="gote-hand-wrapper">
+            <div class="hand" id="gote-hand">
+                <h3>後手 持ち駒</h3>
+                <div class="hand-grid" id="gote-hand-items"></div>
+            </div>
+        </div>
+
+        <div class="board-section">
+            <div class="player-tag">後手（上手）</div>
+
+            <div class="board-layout">
+                <div class="board-col-wrap">
+                    <div class="col-nums" id="col-nums"></div>
+                    <table id="shogi-board"></table>
+                </div>
+                <div class="row-nums" id="row-nums"></div>
+            </div>
+
+            <div class="player-tag">先手（下手）</div>
+        </div>
+
+        <!-- 先手の持ち駒（右下） -->
+        <div class="sente-hand-wrapper">
+            <div class="hand" id="sente-hand">
+                <h3>先手 持ち駒</h3>
+                <div class="hand-grid" id="sente-hand-items"></div>
+            </div>
+        </div>
+
+        <!-- 棋譜パネル -->
+        <div class="kifu-wrapper">
+            <div class="kifu-panel">
+                <h3>棋譜</h3>
+                <div id="kifu-list"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ゲームオーバーオーバーレイ -->
+    <div id="gameover-overlay">
+        <div id="gameover-box">
+            <div id="gameover-text"></div>
+            <button id="replay-btn">もう一度</button>
+        </div>
+    </div>
+
+    <!-- 音声操作バー -->
+    <div class="voice-bar">
+        <button id="mic-btn" title="押している間、音声を認識します">🎤</button>
+        <div class="voice-info">
+            <div id="voice-label">ボタンを押しながら読み上げ（例：７六歩、２六飛）</div>
+            <div id="voice-text"></div>
+            <div class="voice-manual">
+                <input id="voice-input" type="text" placeholder="手動入力テスト（例：７六歩）">
+                <button id="voice-input-btn">実行</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // file:// で開いていた場合は localhost にリダイレクト（マイク許可を常設させるため）
+    if (location.protocol === 'file:') {
+        location.replace('http://localhost/');
+    }
+
+    // ── 定数 ──────────────────────────────────────────────────────────────────
+    const KANJI = {
+        pawn: '歩', lance: '香', knight: '桂',
+        silver: '銀', gold: '金', bishop: '角', rook: '飛',
+        p_pawn: 'と', p_lance: '杏', p_knight: '圭',
+        p_silver: '全', p_bishop: '馬', p_rook: '龍',
+    };
+    const ROW_KANJI = ['一','二','三','四','五','六','七','八','九'];
+
+    // ── 状態 ──────────────────────────────────────────────────────────────────
+    let board = [];
+    let senteHand = {}, goteHand = {};
+    let currentTurn = 'sente';
+    let selected = null;   // { kind:'board', r, c } | { kind:'hand', type }
+    let legalMoves = [];   // [[r, c], ...]
+    let computerThinking = false;
+    let lastMoveDest = null; // 直前の移動先 { r, c }（「同」判定用）
+    let blindMode = false;
+    let gameOver  = false;
+    let inCheck   = false; // 現在の手番側が王手を受けているか
+    let kifu      = [];    // 棋譜エントリ文字列配列
+
+    // ── 初期配置 ───────────────────────────────────────────────────────────────
+    function initBoard() {
+        board = Array.from({length: 9}, () => Array(9).fill(null));
+        const back = ['lance','knight','silver','gold','king','gold','silver','knight','lance'];
+        for (let c = 0; c < 9; c++) {
+            board[0][c] = { type: back[c], player: 'gote',  promoted: false };
+            board[2][c] = { type: 'pawn',  player: 'gote',  promoted: false };
+            board[6][c] = { type: 'pawn',  player: 'sente', promoted: false };
+            board[8][c] = { type: back[c], player: 'sente', promoted: false };
+        }
+        board[1][1] = { type: 'rook',   player: 'gote',  promoted: false }; // 8二 飛
+        board[1][7] = { type: 'bishop', player: 'gote',  promoted: false }; // 2二 角
+        board[7][1] = { type: 'bishop', player: 'sente', promoted: false }; // 8八 角
+        board[7][7] = { type: 'rook',   player: 'sente', promoted: false }; // 2八 飛
+        senteHand = {}; goteHand = {};
+        currentTurn = 'sente'; selected = null; legalMoves = []; computerThinking = false;
+        lastMoveDest = null; gameOver = false; inCheck = false; kifu = [];
+    }
+
+    function pieceKanji(p) {
+        if (!p) return '';
+        if (p.type === 'king') return p.player === 'sente' ? '王' : '玉';
+        return KANJI[p.promoted ? 'p_' + p.type : p.type] ?? p.type;
+    }
+
+    // ── 合法手計算 ─────────────────────────────────────────────────────────────
+    function getLegalMoves(r, c) {
+        const p = board[r][c];
+        if (!p) return [];
+        const fwd = p.player === 'sente' ? -1 : 1;
+        const moves = [];
+
+        const ok  = (tr, tc) => tr >= 0 && tr < 9 && tc >= 0 && tc < 9;
+        const own = (tr, tc) => board[tr][tc]?.player === p.player;
+        const add = (tr, tc) => { if (ok(tr,tc) && !own(tr,tc)) moves.push([tr,tc]); };
+        const slide = (dr, dc) => {
+            let tr = r+dr, tc = c+dc;
+            while (ok(tr,tc)) {
+                if (!board[tr][tc]) { moves.push([tr,tc]); tr+=dr; tc+=dc; }
+                else { if (!own(tr,tc)) moves.push([tr,tc]); break; }
+            }
+        };
+        const gold = () => {
+            add(r+fwd,c-1); add(r+fwd,c); add(r+fwd,c+1);
+            add(r,c-1); add(r,c+1); add(r-fwd,c);
+        };
+
+        const t = p.promoted ? 'p_'+p.type : p.type;
+        switch (t) {
+            case 'pawn':    add(r+fwd, c); break;
+            case 'lance':   slide(fwd, 0); break;
+            case 'knight':  add(r+2*fwd,c-1); add(r+2*fwd,c+1); break;
+            case 'silver':
+                add(r+fwd,c-1); add(r+fwd,c); add(r+fwd,c+1);
+                add(r-fwd,c-1); add(r-fwd,c+1);
+                break;
+            case 'gold': case 'p_pawn': case 'p_lance':
+            case 'p_knight': case 'p_silver': gold(); break;
+            case 'bishop':
+                slide(-1,-1); slide(-1,1); slide(1,-1); slide(1,1); break;
+            case 'rook':
+                slide(-1,0); slide(1,0); slide(0,-1); slide(0,1); break;
+            case 'king':
+                for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++)
+                    if (dr||dc) add(r+dr,c+dc);
+                break;
+            case 'p_bishop':
+                slide(-1,-1); slide(-1,1); slide(1,-1); slide(1,1);
+                add(r-1,c); add(r+1,c); add(r,c-1); add(r,c+1); break;
+            case 'p_rook':
+                slide(-1,0); slide(1,0); slide(0,-1); slide(0,1);
+                add(r-1,c-1); add(r-1,c+1); add(r+1,c-1); add(r+1,c+1); break;
+        }
+        return moves;
+    }
+
+    // ── 駒打ちの合法手 ─────────────────────────────────────────────────────────
+    function getDropMoves(type, player) {
+        const moves = [];
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (board[r][c]) continue;
+                if ((type === 'pawn' || type === 'lance') &&
+                    ((player === 'sente' && r === 0) || (player === 'gote' && r === 8))) continue;
+                if (type === 'knight' &&
+                    ((player === 'sente' && r <= 1) || (player === 'gote' && r >= 7))) continue;
+                if (type === 'pawn') {
+                    let nifu = false;
+                    for (let row = 0; row < 9; row++) {
+                        const q = board[row][c];
+                        if (q && q.player === player && q.type === 'pawn' && !q.promoted) { nifu = true; break; }
+                    }
+                    if (nifu) continue;
+                }
+                moves.push([r, c]);
+            }
+        }
+        return moves;
+    }
+
+    // ── 全合法手（コンピューター用）─────────────────────────────────────────────
+    function getAllLegalMoves(player) {
+        const moves = [];
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (board[r][c]?.player !== player) continue;
+                for (const [toR, toC] of getLegalMoves(r, c))
+                    moves.push({ kind: 'board', fromR: r, fromC: c, toR, toC });
+            }
+        }
+        const hand = player === 'sente' ? senteHand : goteHand;
+        for (const type of Object.keys(hand)) {
+            if ((hand[type] ?? 0) <= 0) continue;
+            for (const [toR, toC] of getDropMoves(type, player))
+                moves.push({ kind: 'drop', type, toR, toC });
+        }
+        return moves;
+    }
+
+    // ── 王手・詰み判定 ────────────────────────────────────────────────────────
+
+    function findKing(player) {
+        for (let r = 0; r < 9; r++)
+            for (let c = 0; c < 9; c++)
+                if (board[r][c]?.type === 'king' && board[r][c]?.player === player)
+                    return [r, c];
+        return null;
+    }
+
+    function isInCheck(player) {
+        const king = findKing(player);
+        if (!king) return false;
+        const [kr, kc] = king;
+        const opp = player === 'sente' ? 'gote' : 'sente';
+        for (let r = 0; r < 9; r++)
+            for (let c = 0; c < 9; c++)
+                if (board[r][c]?.player === opp &&
+                    getLegalMoves(r, c).some(([mr, mc]) => mr === kr && mc === kc))
+                    return true;
+        return false;
+    }
+
+    // 移動後に自玉が王手にならない合法手だけ返す
+    function getLegalMovesStrict(r, c) {
+        const p = board[r][c];
+        if (!p) return [];
+        return getLegalMoves(r, c).filter(([toR, toC]) => {
+            const cap = board[toR][toC];
+            board[toR][toC] = { ...p };
+            board[r][c] = null;
+            const safe = !isInCheck(p.player);
+            board[r][c] = p;
+            board[toR][toC] = cap;
+            return safe;
+        });
+    }
+
+    // 厳密な全合法手（王手を残す手を除外）
+    function getAllLegalMovesStrict(player) {
+        const moves = [];
+        for (let r = 0; r < 9; r++)
+            for (let c = 0; c < 9; c++) {
+                if (board[r][c]?.player !== player) continue;
+                for (const [toR, toC] of getLegalMovesStrict(r, c))
+                    moves.push({ kind: 'board', fromR: r, fromC: c, toR, toC });
+            }
+        const hand = player === 'sente' ? senteHand : goteHand;
+        for (const type of Object.keys(hand)) {
+            if ((hand[type] ?? 0) <= 0) continue;
+            for (const [toR, toC] of getDropMoves(type, player)) {
+                board[toR][toC] = { type, player, promoted: false };
+                const safe = !isInCheck(player);
+                board[toR][toC] = null;
+                if (safe) moves.push({ kind: 'drop', type, toR, toC });
+            }
+        }
+        return moves;
+    }
+
+    // 着手後の王手・詰み判定。{ checkmate, check } を返す
+    function checkPostMove(movedPlayer) {
+        const opp = movedPlayer === 'sente' ? 'gote' : 'sente';
+        const oppMoves = getAllLegalMovesStrict(opp);
+        if (oppMoves.length === 0) {
+            gameOver = true;
+            const winnerName = movedPlayer === 'sente' ? '先手' : '後手';
+            document.getElementById('gameover-text').textContent = `${winnerName}の勝ちです！`;
+            document.getElementById('gameover-overlay').style.display = 'flex';
+            return { checkmate: true, check: false, winnerName };
+        }
+        const check = isInCheck(opp);
+        inCheck = check;
+        return { checkmate: false, check };
+    }
+
+    // ── 成り判定 ───────────────────────────────────────────────────────────────
+    function inZone(player, row) {
+        return player === 'sente' ? row <= 2 : row >= 6;
+    }
+    function mustPromote(type, player, toRow) {
+        if (type === 'pawn' || type === 'lance')
+            return (player === 'sente' && toRow === 0) || (player === 'gote' && toRow === 8);
+        if (type === 'knight')
+            return (player === 'sente' && toRow <= 1) || (player === 'gote' && toRow >= 7);
+        return false;
+    }
+
+    // ── 移動実行 ───────────────────────────────────────────────────────────────
+    function executeMove(fromR, fromC, toR, toC, autoPromote = false) {
+        const piece = board[fromR][fromC];
+        const cap   = board[toR][toC];
+        if (cap) {
+            const hand = currentTurn === 'sente' ? senteHand : goteHand;
+            hand[cap.type] = (hand[cap.type] ?? 0) + 1;
+        }
+        board[toR][toC] = { ...piece };
+        board[fromR][fromC] = null;
+
+        if (!piece.promoted && (inZone(piece.player, fromR) || inZone(piece.player, toR))) {
+            if (mustPromote(piece.type, piece.player, toR)) {
+                board[toR][toC].promoted = true;
+            } else if (piece.type !== 'gold' && piece.type !== 'king') {
+                if (autoPromote || confirm(`${pieceKanji(piece)} を成りますか？`)) {
+                    board[toR][toC].promoted = true;
+                }
+            }
+        }
+        lastMoveDest = { r: toR, c: toC };
+    }
+
+    function executeDrop(type, toR, toC) {
+        const hand = currentTurn === 'sente' ? senteHand : goteHand;
+        hand[type]--;
+        if (hand[type] <= 0) delete hand[type];
+        board[toR][toC] = { type, player: currentTurn, promoted: false };
+        lastMoveDest = { r: toR, c: toC };
+    }
+
+    // ── コンピューター着手 ─────────────────────────────────────────────────────
+    function triggerComputerMove() {
+        computerThinking = true;
+        renderTurnIndicator();
+        setTimeout(() => {
+            const moves = getAllLegalMovesStrict('gote');
+            let computerMoveText = null;
+            if (moves.length > 0) {
+                const mv = moves[Math.floor(Math.random() * moves.length)];
+                if (mv.kind === 'board') executeMove(mv.fromR, mv.fromC, mv.toR, mv.toC, true);
+                else executeDrop(mv.type, mv.toR, mv.toC);
+                computerMoveText = buildMoveText(mv);
+                recordMove(mv.kind, mv.toR, mv.toC);
+            }
+            currentTurn = 'sente';
+            computerThinking = false;
+            const result = checkPostMove('gote');
+            renderAll();
+            if (result.checkmate) {
+                speak(`${result.winnerName}の勝ちです`);
+            } else {
+                const moveTxt = blindMode && computerMoveText
+                    ? `コンピューターが${computerMoveText}と指しました`
+                    : '';
+                if (result.check) speak(moveTxt ? moveTxt + '。王手！' : '王手！');
+                else if (moveTxt) speak(moveTxt);
+            }
+        }, 600);
+    }
+
+    // ── クリック処理 ───────────────────────────────────────────────────────────
+    function onCellClick(r, c) {
+        if (gameOver || blindMode || computerThinking || currentTurn !== 'sente') return;
+        const p = board[r][c];
+
+        // 合法手のマスをクリック → 移動/打ち
+        if (legalMoves.some(([lr,lc]) => lr===r && lc===c)) {
+            const moveKind = selected.kind;
+            if (selected.kind === 'board') executeMove(selected.r, selected.c, r, c);
+            else executeDrop(selected.type, r, c);
+            recordMove(moveKind, r, c);
+            selected = null; legalMoves = [];
+            const result = checkPostMove('sente');
+            if (result.checkmate) { speak(`${result.winnerName}の勝ちです`); renderAll(); return; }
+            if (result.check) speak('王手！');
+            currentTurn = 'gote';
+            renderAll();
+            triggerComputerMove();
+            return;
+        }
+
+        // 自分の駒をクリック → 選択 or 解除
+        if (p && p.player === 'sente') {
+            if (selected?.kind === 'board' && selected.r === r && selected.c === c) {
+                selected = null; legalMoves = [];
+            } else {
+                selected = { kind: 'board', r, c };
+                legalMoves = getLegalMovesStrict(r, c);
+            }
+            renderAll();
+            return;
+        }
+
+        // それ以外 → 解除
+        selected = null; legalMoves = [];
+        renderAll();
+    }
+
+    function onHandPieceClick(type, player) {
+        if (gameOver || blindMode || computerThinking || currentTurn !== 'sente' || player !== 'sente') return;
+        if (selected?.kind === 'hand' && selected.type === type) {
+            selected = null; legalMoves = [];
+        } else {
+            selected = { kind: 'hand', type };
+            // 打った後に自玉が王手になるマスは除外
+            legalMoves = getDropMoves(type, player).filter(([toR, toC]) => {
+                board[toR][toC] = { type, player, promoted: false };
+                const safe = !isInCheck(player);
+                board[toR][toC] = null;
+                return safe;
+            });
+        }
+        renderAll();
+    }
+
+    // ── 棋譜記録 ─────────────────────────────────────────────────────────────
+    function recordMove(kind, toR, toC) {
+        const shogiCol = 9 - toC;
+        const p = board[toR][toC];
+        const suffix = kind === 'drop' ? '打' : '';
+        kifu.push({ n: kifu.length + 1, text: `${shogiCol}${ROW_KANJI[toR]}${pieceKanji(p)}${suffix}` });
+    }
+
+    function renderKifu() {
+        const el = document.getElementById('kifu-list');
+        if (!el) return;
+        el.innerHTML = '';
+        kifu.forEach(({ n, text }) => {
+            const div = document.createElement('div');
+            div.className = 'kifu-entry' + (n % 2 === 0 ? ' gote' : '');
+            div.textContent = `${n} ${text}`;
+            el.appendChild(div);
+        });
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function renderCheckBanner() {
+        const el = document.getElementById('check-banner');
+        if (!el) return;
+        if (inCheck) {
+            el.style.display = 'block';
+            // アニメーション再トリガー
+            el.style.animation = 'none';
+            el.offsetHeight; // reflow
+            el.style.animation = '';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    // ── 描画 ──────────────────────────────────────────────────────────────────
+    function renderAll() {
+        renderBoard();
+        renderHands();
+        renderTurnIndicator();
+        renderCheckBanner();
+        renderKifu();
+    }
+
+    function renderTurnIndicator() {
+        const el = document.getElementById('turn-indicator');
+        if (computerThinking) {
+            el.textContent = '後手（考え中…）';
+        } else {
+            el.textContent = currentTurn === 'sente' ? '先手番' : '後手番';
+        }
+    }
+
+    function renderBoard() {
+        const tbl = document.getElementById('shogi-board');
+        tbl.innerHTML = '';
+        for (let r = 0; r < 9; r++) {
+            const tr = document.createElement('tr');
+            for (let c = 0; c < 9; c++) {
+                const td = document.createElement('td');
+                const p  = board[r][c];
+                const isSelected  = selected?.kind === 'board' && selected.r === r && selected.c === c;
+                const inMoves     = legalMoves.some(([lr,lc]) => lr===r && lc===c);
+                const isCapture   = inMoves && !!p;
+
+                if (isSelected) td.classList.add('selected');
+                if (inMoves && !p) td.classList.add('movable');
+                if (isCapture)    td.classList.add('capturable');
+
+                if (p && !blindMode) {
+                    const slot = document.createElement('div');
+                    slot.className = 'piece-slot';
+                    const filt = document.createElement('div');
+                    filt.className = 'piece-filter';
+                    const el = document.createElement('div');
+                    el.className = `piece ${p.player}${p.promoted ? ' promoted' : ''}`;
+                    if (p.player === 'gote') {
+                        const span = document.createElement('span');
+                        span.className = 'piece-text';
+                        span.textContent = pieceKanji(p);
+                        el.appendChild(span);
+                    } else {
+                        el.textContent = pieceKanji(p);
+                    }
+                    filt.appendChild(el);
+                    slot.appendChild(filt);
+                    td.appendChild(slot);
+                }
+                td.addEventListener('click', () => onCellClick(r, c));
+                tr.appendChild(td);
+            }
+            tbl.appendChild(tr);
+        }
+    }
+
+    function renderLabels() {
+        const colDiv = document.getElementById('col-nums');
+        colDiv.innerHTML = '';
+        for (let i = 9; i >= 1; i--) {
+            const s = document.createElement('span');
+            s.className = 'lbl'; s.textContent = i;
+            colDiv.appendChild(s);
+        }
+        const rowDiv = document.getElementById('row-nums');
+        rowDiv.innerHTML = '';
+        for (let i = 0; i < 9; i++) {
+            const s = document.createElement('span');
+            s.className = 'lbl'; s.textContent = ROW_KANJI[i];
+            rowDiv.appendChild(s);
+        }
+    }
+
+    function renderHands() {
+        renderHandSection(senteHand, 'sente', 'sente-hand-items');
+        renderHandSection(goteHand,  'gote',  'gote-hand-items');
+    }
+
+    function renderHandSection(hand, player, id) {
+        const div = document.getElementById(id);
+        div.innerHTML = '';
+        const handEl = document.getElementById(player === 'sente' ? 'sente-hand' : 'gote-hand');
+        if (blindMode && player === 'gote') {
+            handEl?.classList.add('hidden-hand');
+            return;
+        }
+        handEl?.classList.remove('hidden-hand');
+        const order = ['rook','bishop','gold','silver','knight','lance','pawn'];
+        for (const type of order) {
+            const cnt = hand[type] ?? 0;
+            if (cnt <= 0) continue;
+            const isSelected = selected?.kind === 'hand' && selected.type === type && currentTurn === player;
+            const item = document.createElement('div');
+            item.className = 'hand-piece-item' + (isSelected ? ' selected-hand' : '');
+            item.textContent = KANJI[type] ?? type;
+            if (cnt > 1) {
+                const badge = document.createElement('span');
+                badge.className = 'cnt'; badge.textContent = cnt;
+                item.appendChild(badge);
+            }
+            item.addEventListener('click', () => onHandPieceClick(type, player));
+            div.appendChild(item);
+        }
+    }
+
+    // ── 音声合成（読み上げ） ───────────────────────────────────────────────────
+
+    function speak(text) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = 'ja-JP';
+        utt.rate = 1.1;
+        window.speechSynthesis.speak(utt);
+    }
+
+    // 移動先の表示テキストを組み立てる（executeMove/executeDrop 後に呼ぶ）
+    function buildMoveText(mv) {
+        const shogiCol = 9 - mv.toC;
+        const rowKanji = ROW_KANJI[mv.toR];
+        const p = board[mv.toR][mv.toC];
+        return `${shogiCol}${rowKanji}${pieceKanji(p)}`;
+    }
+
+    // ── 音声認識 ──────────────────────────────────────────────────────────────
+
+    // 数字の読み（長いものを先に並べて部分マッチを防ぐ）
+    const NUM_READINGS = [
+        ['ひとつ',1],['ふたつ',2],['きゅう',9],
+        ['いち',1],['ふた',2],['ひと',1],['よん',4],
+        ['なな',7],['しち',7],['さん',3],['はち',8],['ろく',6],
+        ['ご',5],['に',2],['よ',4],
+        ['一',1],['二',2],['三',3],['四',4],['五',5],['六',6],['七',7],['八',8],['九',9],
+        ['１',1],['２',2],['３',3],['４',4],['５',5],['６',6],['７',7],['８',8],['９',9],
+        ['1',1],['2',2],['3',3],['4',4],['5',5],['6',6],['7',7],['8',8],['9',9],
+        ['し',4],['く',9], // 末尾に置いて「しち」「ろく」より後にマッチさせる
+    ];
+
+    // 駒の読み（長いものを先に）: [読み, baseType, 成り駒か]
+    const PIECE_READINGS = [
+        // 成り龍
+        ['りゅうおう','rook',true],['りゅうき','rook',true],['りゅう','rook',true],
+        ['龍王','rook',true],['竜王','rook',true],['龍','rook',true],['竜','rook',true],
+        // 成り馬
+        ['りゅうま','bishop',true],['うま','bishop',true],
+        ['龍馬','bishop',true],['馬','bishop',true],
+        // と金
+        ['ときん','pawn',true],['と','pawn',true],
+        // 成香
+        ['なりきょうしゃ','lance',true],['なりきょう','lance',true],
+        ['成香車','lance',true],['成香','lance',true],['杏','lance',true],
+        // 成桂
+        ['なりけいま','knight',true],['なりけい','knight',true],
+        ['成桂馬','knight',true],['成桂','knight',true],['圭','knight',true],
+        // 成銀
+        ['なりぎんしょう','silver',true],['なりぎん','silver',true],
+        ['成銀将','silver',true],['成銀','silver',true],['全','silver',true],
+        // 飛車
+        ['ひしゃ','rook',false],['飛車','rook',false],['ひ','rook',false],['飛','rook',false],
+        // 角
+        ['かくぎょう','bishop',false],['角行','bishop',false],['かく','bishop',false],['角','bishop',false],
+        // 金
+        ['きんしょう','gold',false],['金将','gold',false],['きん','gold',false],['金','gold',false],
+        // 銀
+        ['ぎんしょう','silver',false],['銀将','silver',false],['ぎん','silver',false],['銀','silver',false],
+        // 桂
+        ['けいま','knight',false],['桂馬','knight',false],['けい','knight',false],['桂','knight',false],
+        // 香
+        ['きょうしゃ','lance',false],['香車','lance',false],['きょう','lance',false],['香','lance',false],
+        // 王・玉
+        ['おうしょう','king',false],['ぎょくしょう','king',false],
+        ['王将','king',false],['玉将','king',false],
+        ['おう','king',false],['ぎょく','king',false],['たま','king',false],
+        ['王','king',false],['玉','king',false],
+        // 歩（最後: 'ふ' は短くて数字「ふたつ」と競合するため）
+        ['ふみん','pawn',false],['ふみ','pawn',false],
+        ['歩兵','pawn',false],['歩','pawn',false],['ふ','pawn',false],
+    ];
+
+    // 「同」の読み（長いものを先に）
+    const DOU_READINGS = ['どうじょ','どう','同'];
+
+    // 方向修飾子の読み（長いものを先に）
+    const DIR_READINGS = [
+        ['ひだり','left'],['左','left'],
+        ['みぎ','right'],['右','right'],
+        ['なおし','straight'],['ちょく','straight'],['すぐ','straight'],['直','straight'],
+        ['あがる','up'],['上','up'],
+        ['ひく','down'],['引','down'],
+        ['より','lateral'],['寄','lateral'],
+    ];
+
+    // 方向→表示漢字
+    const DIR_KANJI = { right:'右', left:'左', straight:'直', up:'上', down:'引', lateral:'寄' };
+
+    let micActive    = false;
+    let recognition  = null;
+    let lastVoiceText = '';   // 最後に認識されたテキスト（interim含む）
+    let moveExecuted  = false; // 1回の発話で二重実行を防ぐフラグ
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRec) {
+        recognition = new SpeechRec();
+        recognition.lang = 'ja-JP';
+        recognition.continuous    = false; // 発話後すぐ確定させる
+        recognition.interimResults = true;
+
+        recognition.onresult = (event) => {
+            let interim = '', final = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const t = event.results[i][0].transcript;
+                console.log(`[Voice] result[${i}] isFinal=${event.results[i].isFinal} "${t}"`);
+                if (event.results[i].isFinal) final += t; else interim += t;
+            }
+            const display = final || interim;
+            lastVoiceText = display;
+            setVoiceText(display, !final);
+
+            // isFinal が来たらすぐ処理
+            if (final) tryVoiceMove(final);
+        };
+
+        recognition.onerror = (event) => {
+            console.log('[Voice] error:', event.error);
+            if (event.error !== 'no-speech') setVoiceText(`エラー: ${event.error}`, false);
+            if (event.error === 'not-allowed') setVoiceText('マイクの使用が許可されていません', false);
+            micActive = false;
+            updateMicBtn();
+        };
+
+        // continuous=false でボタンを押し続けている間は onend で再起動
+        recognition.onend = () => {
+            console.log('[Voice] onend micActive=', micActive);
+            if (micActive) {
+                try { recognition.start(); }
+                catch(e) { micActive = false; updateMicBtn(); }
+            } else {
+                updateMicBtn();
+            }
+        };
+    }
+
+    function startListening() {
+        if (!recognition) { setVoiceText('このブラウザは音声認識に未対応です', false); return; }
+        if (micActive) return;
+        micActive     = true;
+        moveExecuted  = false;
+        lastVoiceText = '';
+        updateMicBtn();
+        setVoiceText('認識中…', true);
+        try { recognition.start(); }
+        catch(e) { console.log('[Voice] start error', e); micActive = false; updateMicBtn(); }
+    }
+
+    function stopListening() {
+        micActive = false;
+        try { recognition?.stop(); } catch(e) {}
+        updateMicBtn();
+
+        // isFinal が来なかった場合のフォールバック: ボタンを離したときに最後のテキストを処理
+        const fallback = lastVoiceText;
+        setTimeout(() => {
+            if (!moveExecuted && fallback) {
+                console.log('[Voice] fallback on button release:', fallback);
+                tryVoiceMove(fallback);
+            }
+        }, 250);
+    }
+
+    function updateMicBtn() {
+        document.getElementById('mic-btn')?.classList.toggle('active', micActive);
+    }
+
+    function setVoiceText(text, isInterim) {
+        const el = document.getElementById('voice-text');
+        if (!el) return;
+        el.textContent   = text;
+        el.style.opacity = isInterim ? '0.5' : '1';
+    }
+
+    // テキストを数字トークンと駒トークンに分解する
+    // 各位置でまず数字を試み（長優先）、次に駒を試みる
+    function tokenizeVoice(text) {
+        const tokens = [];
+        let pos = 0;
+        while (pos < text.length) {
+            let hit = false;
+            // 「同」チェック（最優先）
+            for (const rd of DOU_READINGS) {
+                if (text.startsWith(rd, pos)) {
+                    tokens.push({ type: 'dou' });
+                    pos += rd.length; hit = true; break;
+                }
+            }
+            // 方向修飾子
+            if (!hit) {
+                for (const [rd, dir] of DIR_READINGS) {
+                    if (text.startsWith(rd, pos)) {
+                        tokens.push({ type: 'dir', dir });
+                        pos += rd.length; hit = true; break;
+                    }
+                }
+            }
+            // 数字
+            if (!hit) {
+                for (const [rd, val] of NUM_READINGS) {
+                    if (text.startsWith(rd, pos)) {
+                        tokens.push({ type: 'num', value: val });
+                        pos += rd.length; hit = true; break;
+                    }
+                }
+            }
+            // 駒
+            if (!hit) {
+                for (const [rd, baseType, isPromoted] of PIECE_READINGS) {
+                    if (text.startsWith(rd, pos)) {
+                        tokens.push({ type: 'piece', baseType, isPromoted });
+                        pos += rd.length; hit = true; break;
+                    }
+                }
+            }
+            if (!hit) pos++; // 未知文字はスキップ
+        }
+        return tokens;
+    }
+
+    // 音声/テキストを解析して指し手データを返す
+    function parseVoiceMove(rawText) {
+        const text = rawText.replace(/\s/g, '');
+        console.log('[Voice] parseVoiceMove:', rawText, '→', text);
+
+        const forcePromote = /なり|成り?/.test(text);
+        const isDrop       = /うち|打/.test(text);
+
+        const tokens = tokenizeVoice(text);
+        console.log('[Voice] tokens:', JSON.stringify(tokens));
+
+        const hasDou = tokens.some(t => t.type === 'dou');
+        const dirTok = tokens.find(t => t.type === 'dir');
+        const dir    = dirTok?.dir ?? null;
+        const nums   = tokens.filter(t => t.type === 'num');
+        const pieces = tokens.filter(t => t.type === 'piece');
+
+        let c, r;
+        if (hasDou) {
+            if (!lastMoveDest) {
+                console.log('[Voice] 「同」: 前の移動先が不明');
+                return null;
+            }
+            r = lastMoveDest.r;
+            c = lastMoveDest.c;
+        } else {
+            if (nums.length < 2) {
+                console.log('[Voice] 数字が不足:', nums);
+                return null;
+            }
+            const col = nums[0].value;
+            const row = nums[1].value;
+            c = 9 - col;
+            r = row - 1;
+            if (c < 0 || c > 8 || r < 0 || r > 8) return null;
+        }
+
+        const piece     = pieces[0] ?? null;
+        const shogiCol  = 9 - c;
+        const rowKanji  = ROW_KANJI[r];
+        const pieceKanj = piece
+            ? (piece.isPromoted
+                ? (KANJI['p_' + piece.baseType] ?? KANJI[piece.baseType] ?? '')
+                : (KANJI[piece.baseType] ?? ''))
+            : '';
+        const dirKanj   = dir ? (DIR_KANJI[dir] ?? '') : '';
+        const displayText = hasDou
+            ? `同${pieceKanj}${dirKanj}`
+            : `${shogiCol}${rowKanji}${pieceKanj}`;
+
+        const result = {
+            c, r, dir,
+            baseType:    piece?.baseType  ?? null,
+            isPromoted:  piece?.isPromoted ?? false,
+            forcePromote, isDrop,
+            displayText,
+        };
+        console.log('[Voice] parsed:', result);
+        return result;
+    }
+
+    // 方向修飾子が発生元の位置に合っているか
+    function matchesDirection(fr, fc, toR, toC, dir) {
+        switch (dir) {
+            case 'right':    return fc > toC;   // 先手から見て右（配列列が大きい）
+            case 'left':     return fc < toC;
+            case 'straight': return fc === toC;
+            case 'up':       return fr > toR;   // 後ろから前進
+            case 'down':     return fr < toR;   // 前から後退
+            case 'lateral':  return fr === toR;
+            default: return true;
+        }
+    }
+
+    // 解析結果をもとに先手の合法手を探して実行
+    function findAndExecuteVoiceMove({ c, r, dir, baseType, isPromoted, isDrop, forcePromote }) {
+        console.log('[Voice] findAndExecute:', { c, r, dir, baseType, isPromoted, isDrop });
+        if (r < 0 || r > 8 || c < 0 || c > 8) return false;
+
+        // 「打」明示
+        if (isDrop) {
+            if (!baseType || (senteHand[baseType] ?? 0) <= 0) return false;
+            const dm = getDropMoves(baseType, 'sente');
+            if (!dm.some(([dr,dc]) => dr===r && dc===c)) return false;
+            board[r][c] = { type: baseType, player: 'sente', promoted: false };
+            const wouldCheck = isInCheck('sente');
+            board[r][c] = null;
+            if (wouldCheck) return false;
+            executeDrop(baseType, r, c);
+            return true;
+        }
+
+        // 盤上の候補を集める（王手を残す手は除外）
+        const cands = [];
+        for (let fr = 0; fr < 9; fr++) {
+            for (let fc = 0; fc < 9; fc++) {
+                const p = board[fr][fc];
+                if (!p || p.player !== 'sente') continue;
+                if (baseType && p.type !== baseType) continue;
+                if (baseType && p.promoted !== isPromoted) continue;
+                if (getLegalMovesStrict(fr, fc).some(([mr,mc]) => mr===r && mc===c)) {
+                    cands.push({ fr, fc });
+                }
+            }
+        }
+        console.log('[Voice] candidates:', cands);
+
+        // 方向修飾子で絞り込む
+        const filtered = dir
+            ? cands.filter(({ fr, fc }) => matchesDirection(fr, fc, r, c, dir))
+            : cands;
+        console.log('[Voice] filtered by dir:', filtered);
+
+        if (filtered.length === 1) {
+            executeMove(filtered[0].fr, filtered[0].fc, r, c, forcePromote);
+            return true;
+        }
+        if (filtered.length > 1) {
+            if (baseType) { console.log('[Voice] 曖昧: 複数候補'); return false; }
+            executeMove(filtered[0].fr, filtered[0].fc, r, c, forcePromote);
+            return true;
+        }
+
+        // 持ち駒からの暗黙の打ち（「同」でdirなしの場合のみ）
+        if (!dir && baseType && !isPromoted && (senteHand[baseType] ?? 0) > 0) {
+            const dm = getDropMoves(baseType, 'sente');
+            if (dm.some(([dr,dc]) => dr===r && dc===c)) {
+                board[r][c] = { type: baseType, player: 'sente', promoted: false };
+                const wouldCheck = isInCheck('sente');
+                board[r][c] = null;
+                if (!wouldCheck) { executeDrop(baseType, r, c); return true; }
+            }
+        }
+
+        console.log('[Voice] 合法手なし');
+        return false;
+    }
+
+    // 音声/手動入力の共通処理
+    function tryVoiceMove(text) {
+        if (moveExecuted) return;
+        if (gameOver || currentTurn !== 'sente' || computerThinking) {
+            setVoiceText('先手番ではありません', false);
+            return;
+        }
+        console.log('[Voice] tryVoiceMove:', text);
+        const parsed = parseVoiceMove(text);
+        if (!parsed) {
+            setVoiceText(`"${text.trim()}" — 解析できません`, false);
+            return;
+        }
+        const ok = findAndExecuteVoiceMove(parsed);
+        if (ok) {
+            moveExecuted = true;
+            stopListening();
+            setVoiceText(`${parsed.displayText} ✓`, false);
+            recordMove(parsed.isDrop ? 'drop' : 'board', parsed.r, parsed.c);
+            const result = checkPostMove('sente');
+            if (result.checkmate) {
+                speak(`${result.winnerName}の勝ちです`);
+                currentTurn = 'gote';
+                renderAll();
+                return;
+            }
+            const moveTxt = blindMode
+                ? (() => { const p = board[parsed.r][parsed.c]; return `${9 - parsed.c}${ROW_KANJI[parsed.r]}${pieceKanji(p)}に移動しました`; })()
+                : '';
+            if (result.check) speak(moveTxt ? moveTxt + '。王手！' : '王手！');
+            else if (moveTxt) speak(moveTxt);
+            currentTurn = 'gote';
+            renderAll();
+            triggerComputerMove();
+        } else {
+            setVoiceText(`${text.trim()} — 合法手なし`, false);
+        }
+    }
+
+    // ── 起動 ──────────────────────────────────────────────────────────────────
+    initBoard();
+    renderLabels();
+    renderAll();
+
+    // マイクボタンのイベント（PC: mousedown/up、スマホ: touchstart/end）
+    const micBtn = document.getElementById('mic-btn');
+    if (micBtn) {
+        micBtn.addEventListener('mousedown',  (e) => { e.preventDefault(); startListening(); });
+        micBtn.addEventListener('mouseup',    stopListening);
+        micBtn.addEventListener('mouseleave', stopListening);
+        micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startListening(); }, { passive: false });
+        micBtn.addEventListener('touchend',   stopListening);
+        micBtn.addEventListener('touchcancel',stopListening);
+    }
+
+    // 手動テキスト入力のイベント
+    const voiceInputEl  = document.getElementById('voice-input');
+    const voiceInputBtn = document.getElementById('voice-input-btn');
+    const submitManual  = () => {
+        const text = voiceInputEl?.value.trim();
+        if (!text) return;
+        moveExecuted = false;
+        lastVoiceText = text;
+        setVoiceText(text, false);
+        tryVoiceMove(text);
+        voiceInputEl.value = '';
+    };
+    voiceInputBtn?.addEventListener('click', submitManual);
+    voiceInputEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) submitManual(); });
+
+    // 目隠しモードトグル
+    const blindToggleBtn = document.getElementById('blind-toggle');
+    const voiceLabelEl   = document.getElementById('voice-label');
+    const VOICE_LABEL_NORMAL = 'ボタンを押しながら読み上げ（例：７六歩、２六飛）';
+    const VOICE_LABEL_BLIND  = '【目隠し中】音声または入力で指し手を入力（例：７六歩）';
+
+    // 「もう一度」ボタン
+    document.getElementById('replay-btn')?.addEventListener('click', () => {
+        document.getElementById('gameover-overlay').style.display = 'none';
+        initBoard();
+        renderLabels();
+        renderAll();
+    });
+
+    if (blindToggleBtn) {
+        blindToggleBtn.addEventListener('click', () => {
+            blindMode = !blindMode;
+            selected = null; legalMoves = [];
+            blindToggleBtn.textContent = `目隠しモード ${blindMode ? 'ON' : 'OFF'}`;
+            blindToggleBtn.classList.toggle('blind-on', blindMode);
+            if (voiceLabelEl) voiceLabelEl.textContent = blindMode ? VOICE_LABEL_BLIND : VOICE_LABEL_NORMAL;
+            renderAll();
+            if (blindMode) speak('目隠しモードをオンにしました。音声または入力欄で指し手を入力してください。');
+        });
+    }
+    </script>
+</body>
+</html>
