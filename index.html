@@ -391,6 +391,53 @@
             transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
         #blind-toggle:hover { background: #4a2010; color: #f0ddb0; }
+
+        /* ── CPUレベル選択 ── */
+        .level-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .level-label {
+            color: #5a3818;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+        .level-btns { display: flex; gap: 4px; }
+        .lv-btn {
+            width: 32px;
+            height: 28px;
+            border: 1px solid #6a3a10;
+            border-radius: 4px;
+            background: #2e1406;
+            color: #a09070;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.12s, color 0.12s;
+        }
+        .lv-btn:hover { background: #4a2010; color: #f0ddb0; }
+        .lv-btn.active {
+            background: #8b4513;
+            border-color: #c89840;
+            color: #f0ddb0;
+            font-weight: bold;
+        }
+        .engine-status {
+            font-size: 10px;
+            color: #806040;
+            letter-spacing: 1px;
+            padding: 2px 6px;
+            border: 1px solid #6a3a10;
+            border-radius: 3px;
+            align-self: center;
+        }
+        .engine-status[data-ready="1"] {
+            color: #40c060;
+            border-color: #40c060;
+        }
+
         #blind-toggle.blind-on {
             background: #6b0000;
             border-color: #cc2200;
@@ -506,6 +553,17 @@
 <body>
     <h1>目隠し将棋</h1>
     <button id="blind-toggle">目隠しモード OFF</button>
+    <div class="level-bar">
+        <span class="level-label">CPU強さ：</span>
+        <div class="level-btns" id="level-btns">
+            <button class="lv-btn" data-lv="1">1</button>
+            <button class="lv-btn" data-lv="2">2</button>
+            <button class="lv-btn active" data-lv="3">3</button>
+            <button class="lv-btn" data-lv="4">4</button>
+            <button class="lv-btn" data-lv="5">5</button>
+        </div>
+        <span class="engine-status" id="engine-status">JS</span>
+    </div>
     <div class="turn-indicator" id="turn-indicator">先手番</div>
     <div id="check-banner">王手！</div>
 
@@ -808,7 +866,7 @@
     }
 
     // ── 移動実行 ───────────────────────────────────────────────────────────────
-    function executeMove(fromR, fromC, toR, toC, autoPromote = false) {
+    function executeMove(fromR, fromC, toR, toC, autoPromote = false, suppressDialog = false) {
         const piece = board[fromR][fromC];
         const cap   = board[toR][toC];
         if (cap) {
@@ -822,9 +880,10 @@
             if (mustPromote(piece.type, piece.player, toR)) {
                 board[toR][toC].promoted = true;
             } else if (piece.type !== 'gold' && piece.type !== 'king') {
-                if (autoPromote || confirm(`${pieceKanji(piece)} を成りますか？`)) {
-                    board[toR][toC].promoted = true;
-                }
+                const doPromote = suppressDialog
+                    ? autoPromote
+                    : (autoPromote || confirm(`${pieceKanji(piece)} を成りますか？`));
+                if (doPromote) board[toR][toC].promoted = true;
             }
         }
         lastMoveDest = { r: toR, c: toC };
@@ -838,15 +897,309 @@
         lastMoveDest = { r: toR, c: toC };
     }
 
+    // ── やねうら王 WASM エンジン ───────────────────────────────────────────────
+
+    const PIECE_TO_SFEN = {
+        pawn:'P', lance:'L', knight:'N', silver:'S',
+        gold:'G', bishop:'B', rook:'R', king:'K',
+    };
+    const SFEN_TO_PIECE = {
+        p:'pawn', l:'lance', n:'knight', s:'silver',
+        g:'gold', b:'bishop', r:'rook', k:'king',
+    };
+
+    // 盤面 → SFEN 文字列
+    function boardToSfen() {
+        const rows = [];
+        for (let r = 0; r < 9; r++) {
+            let row = '', empty = 0;
+            for (let c = 0; c < 9; c++) {
+                const p = board[r][c];
+                if (!p) { empty++; continue; }
+                if (empty) { row += empty; empty = 0; }
+                let code = PIECE_TO_SFEN[p.type] ?? 'P';
+                if (p.promoted) code = '+' + code;
+                if (p.player === 'gote')
+                    code = p.promoted ? '+' + code[1].toLowerCase() : code.toLowerCase();
+                row += code;
+            }
+            if (empty) row += empty;
+            rows.push(row);
+        }
+        return rows.join('/');
+    }
+
+    // 持ち駒 → SFEN 手駒文字列
+    function handsToSfen() {
+        const order = ['rook','bishop','gold','silver','knight','lance','pawn'];
+        let s = '';
+        for (const t of order) {
+            const n = senteHand[t] ?? 0;
+            if (n > 0) s += (n > 1 ? n : '') + PIECE_TO_SFEN[t];
+        }
+        for (const t of order) {
+            const n = goteHand[t] ?? 0;
+            if (n > 0) s += (n > 1 ? n : '') + PIECE_TO_SFEN[t].toLowerCase();
+        }
+        return s || '-';
+    }
+
+    // USI position コマンド生成（currentTurn = 'gote' の状態で呼ぶ）
+    function toPositionCmd() {
+        const b = boardToSfen();
+        const turn = currentTurn === 'sente' ? 'b' : 'w';
+        const h = handsToSfen();
+        return `position sfen ${b} ${turn} ${h} 1`;
+    }
+
+    // USI 指し手 → 内部形式
+    function usiToMyMove(usiMove) {
+        if (!usiMove || usiMove === 'resign' || usiMove === 'win') return null;
+        if (usiMove[1] === '*') {
+            const type = SFEN_TO_PIECE[usiMove[0].toLowerCase()];
+            const col  = parseInt(usiMove[2]);
+            const row  = usiMove[3].charCodeAt(0) - 97;
+            return { kind:'drop', type, toR:row, toC:9-col };
+        }
+        const promote = usiMove.length === 5 && usiMove[4] === '+';
+        const fromC = 9 - parseInt(usiMove[0]);
+        const fromR = usiMove[1].charCodeAt(0) - 97;
+        const toC   = 9 - parseInt(usiMove[2]);
+        const toR   = usiMove[3].charCodeAt(0) - 97;
+        return { kind:'board', fromR, fromC, toR, toC, promote };
+    }
+
+    let wasmEngine = null;
+    let wasmReady  = false;
+    let bestMoveResolve = null;
+
+    function sendAndWait(engine, cmd, waitFor) {
+        return new Promise(resolve => {
+            const listener = line => {
+                if (line.startsWith(waitFor)) {
+                    engine.removeMessageListener(listener);
+                    resolve();
+                }
+            };
+            engine.addMessageListener(listener);
+            engine.postMessage(cmd);
+        });
+    }
+
+    async function initWasmEngine() {
+        try {
+            const statusEl = document.getElementById('engine-status');
+            if (statusEl) statusEl.textContent = '読込中';
+
+            // YaneuraOu はスクリプトロード後にグローバルで利用可能
+            let mod = YaneuraOu({ locateFile: p => `/engine/${p}` });
+            if (mod && typeof mod.then === 'function') mod = await mod;
+            if (mod.ready) await mod.ready;
+
+            // bestmove を受け取るメインリスナー
+            mod.addMessageListener(line => {
+                if (line.startsWith('bestmove') && bestMoveResolve) {
+                    const mv   = line.split(' ')[1];
+                    const res  = bestMoveResolve;
+                    bestMoveResolve = null;
+                    res(mv);
+                }
+            });
+
+            await sendAndWait(mod, 'usi', 'usiok');
+            mod.postMessage('setoption name USI_Hash value 64');
+            mod.postMessage('setoption name Threads value 2');
+            await sendAndWait(mod, 'isready', 'readyok');
+
+            wasmEngine = mod;
+            wasmReady  = true;
+            if (statusEl) {
+                statusEl.textContent = 'WASM';
+                statusEl.setAttribute('data-ready', '1');
+            }
+            console.log('[WASM] やねうら王 準備完了');
+        } catch (e) {
+            console.warn('[WASM] 初期化失敗 → JSエンジンで継続:', e.message ?? e);
+            const statusEl = document.getElementById('engine-status');
+            if (statusEl) statusEl.textContent = 'JS';
+        }
+    }
+
+    // レベル別探索深さ（WASM版）
+    const LEVEL_DEPTH_WASM = [0, 1, 3, 5, 7, 10];
+
+    async function askWasmMove() {
+        const depth  = LEVEL_DEPTH_WASM[cpuLevel] ?? 5;
+        const posCmd = toPositionCmd();
+        console.log('[Engine >]', posCmd);
+        wasmEngine.postMessage(posCmd);
+        return new Promise((resolve, reject) => {
+            bestMoveResolve = resolve;
+            const goCmd = `go depth ${depth}`;
+            console.log('[Engine >]', goCmd);
+            wasmEngine.postMessage(goCmd);
+            setTimeout(() => {
+                if (bestMoveResolve) { bestMoveResolve = null; reject(new Error('timeout')); }
+            }, 60000);
+        });
+    }
+
+    // ── CPUエンジン（アルファベータ探索） ──────────────────────────────────────
+    let cpuLevel = 3;
+
+    const PIECE_VALS = {
+        pawn: 100, lance: 350, knight: 400, silver: 550, gold: 650,
+        bishop: 900, rook: 1100, king: 10000,
+        p_pawn: 450, p_lance: 500, p_knight: 500, p_silver: 600,
+        p_bishop: 1300, p_rook: 1500,
+    };
+
+    function evalPiece(p) {
+        return PIECE_VALS[p.promoted ? 'p_' + p.type : p.type] ?? 0;
+    }
+
+    // 評価関数（正 = 後手有利）
+    function evaluatePosition() {
+        let score = 0;
+        for (let r = 0; r < 9; r++)
+            for (let c = 0; c < 9; c++) {
+                const p = board[r][c];
+                if (!p) continue;
+                score += p.player === 'gote' ? evalPiece(p) : -evalPiece(p);
+            }
+        for (const [t, n] of Object.entries(goteHand))
+            score += Math.round((PIECE_VALS[t] ?? 0) * 0.85 * (n || 0));
+        for (const [t, n] of Object.entries(senteHand))
+            score -= Math.round((PIECE_VALS[t] ?? 0) * 0.85 * (n || 0));
+        return score;
+    }
+
+    function capScore(mv) {
+        if (mv.kind !== 'board') return 0;
+        const cap = board[mv.toR]?.[mv.toC];
+        return cap ? evalPiece(cap) : 0;
+    }
+
+    function saveState() {
+        return [
+            board.map(row => row.map(cel => cel ? {...cel} : null)),
+            {...goteHand}, {...senteHand}, lastMoveDest, currentTurn,
+        ];
+    }
+
+    function loadState([sb, sg, ss, sl, st]) {
+        board = sb; goteHand = sg; senteHand = ss; lastMoveDest = sl; currentTurn = st;
+    }
+
+    function applyMv(mv, player) {
+        const s = saveState();
+        currentTurn = player;
+        if (mv.kind === 'board') executeMove(mv.fromR, mv.fromC, mv.toR, mv.toC, true);
+        else executeDrop(mv.type, mv.toR, mv.toC);
+        return s;
+    }
+
+    function alphabeta(depth, alpha, beta, isGoteMax) {
+        if (depth === 0) return evaluatePosition();
+        const player = isGoteMax ? 'gote' : 'sente';
+        const moves = getAllLegalMovesStrict(player);
+        if (!moves.length) return isGoteMax ? -20000 : 20000;
+        moves.sort((a, b) => capScore(b) - capScore(a));
+
+        if (isGoteMax) {
+            let v = -Infinity;
+            for (const mv of moves) {
+                const s = applyMv(mv, 'gote');
+                v = Math.max(v, alphabeta(depth - 1, alpha, beta, false));
+                loadState(s);
+                alpha = Math.max(alpha, v);
+                if (beta <= alpha) break;
+            }
+            return v;
+        } else {
+            let v = Infinity;
+            for (const mv of moves) {
+                const s = applyMv(mv, 'sente');
+                v = Math.min(v, alphabeta(depth - 1, alpha, beta, true));
+                loadState(s);
+                beta = Math.min(beta, v);
+                if (beta <= alpha) break;
+            }
+            return v;
+        }
+    }
+
+    function findBestMove(depth) {
+        const moves = getAllLegalMovesStrict('gote');
+        if (!moves.length) return null;
+        moves.sort((a, b) => capScore(b) - capScore(a));
+
+        let bestScore = -Infinity;
+        const scored = [];
+        for (const mv of moves) {
+            const s = applyMv(mv, 'gote');
+            const score = alphabeta(depth - 1, -Infinity, Infinity, false);
+            loadState(s);
+            scored.push({ mv, score });
+            if (score > bestScore) bestScore = score;
+        }
+        const best = scored.filter(x => x.score === bestScore);
+        return best[Math.floor(Math.random() * best.length)].mv;
+    }
+
     // ── コンピューター着手 ─────────────────────────────────────────────────────
-    function triggerComputerMove() {
+    // JSフォールバック探索深さ: 1=ランダム, 2=深さ1, 3=深さ2, 4=深さ2, 5=深さ3
+    const CPU_DEPTHS = [0, 0, 1, 2, 2, 3];
+
+    function announceMove(result, computerMoveText) {
+        if (result.checkmate) {
+            speak(`${result.winnerName}の勝ちです`);
+        } else {
+            const moveTxt = blindMode && computerMoveText
+                ? `コンピューターが${computerMoveText}と指しました` : '';
+            if (result.check) speak(moveTxt ? moveTxt + '。王手！' : '王手！');
+            else if (moveTxt) speak(moveTxt);
+        }
+    }
+
+    async function triggerComputerMove() {
         computerThinking = true;
         renderTurnIndicator();
+
+        // ── WASM エンジン（優先） ──────────────────────────────────────────
+        if (wasmReady) {
+            try {
+                const usiMove = await askWasmMove();
+                const mv = usiToMyMove(usiMove);
+                let computerMoveText = null;
+                if (mv) {
+                    if (mv.kind === 'board')
+                        executeMove(mv.fromR, mv.fromC, mv.toR, mv.toC, mv.promote, true);
+                    else
+                        executeDrop(mv.type, mv.toR, mv.toC);
+                    computerMoveText = buildMoveText(mv);
+                    recordMove(mv.kind, mv.toR, mv.toC);
+                }
+                currentTurn = 'sente';
+                computerThinking = false;
+                const result = checkPostMove('gote');
+                renderAll();
+                announceMove(result, computerMoveText);
+                return;
+            } catch (e) {
+                console.error('[WASM] エラー → JSエンジンにフォールバック:', e);
+            }
+        }
+
+        // ── JS アルファベータ（フォールバック） ───────────────────────────
+        const depth = CPU_DEPTHS[cpuLevel] ?? 2;
         setTimeout(() => {
             const moves = getAllLegalMovesStrict('gote');
             let computerMoveText = null;
             if (moves.length > 0) {
-                const mv = moves[Math.floor(Math.random() * moves.length)];
+                let mv = depth === 0
+                    ? moves[Math.floor(Math.random() * moves.length)]
+                    : (findBestMove(depth) ?? moves[0]);
                 if (mv.kind === 'board') executeMove(mv.fromR, mv.fromC, mv.toR, mv.toC, true);
                 else executeDrop(mv.type, mv.toR, mv.toC);
                 computerMoveText = buildMoveText(mv);
@@ -856,16 +1209,8 @@
             computerThinking = false;
             const result = checkPostMove('gote');
             renderAll();
-            if (result.checkmate) {
-                speak(`${result.winnerName}の勝ちです`);
-            } else {
-                const moveTxt = blindMode && computerMoveText
-                    ? `コンピューターが${computerMoveText}と指しました`
-                    : '';
-                if (result.check) speak(moveTxt ? moveTxt + '。王手！' : '王手！');
-                else if (moveTxt) speak(moveTxt);
-            }
-        }, 600);
+            announceMove(result, computerMoveText);
+        }, 50);
     }
 
     // ── クリック処理 ───────────────────────────────────────────────────────────
@@ -970,7 +1315,7 @@
     function renderTurnIndicator() {
         const el = document.getElementById('turn-indicator');
         if (computerThinking) {
-            el.textContent = '後手（考え中…）';
+            el.textContent = wasmReady ? '後手（やねうら王 思考中…）' : '後手（考え中…）';
         } else {
             el.textContent = currentTurn === 'sente' ? '先手番' : '後手番';
         }
@@ -1510,6 +1855,15 @@
         renderAll();
     });
 
+    // CPUレベル選択
+    document.querySelectorAll('.lv-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            cpuLevel = parseInt(btn.dataset.lv, 10);
+            document.querySelectorAll('.lv-btn').forEach(b =>
+                b.classList.toggle('active', b === btn));
+        });
+    });
+
     if (blindToggleBtn) {
         blindToggleBtn.addEventListener('click', () => {
             blindMode = !blindMode;
@@ -1520,6 +1874,24 @@
             renderAll();
             if (blindMode) speak('目隠しモードをオンにしました。音声または入力欄で指し手を入力してください。');
         });
+    }
+
+    // やねうら王 WASM エンジンを非同期ロード（COEP/COOP 環境のみ）
+    if (window.crossOriginIsolated) {
+        (async () => {
+            try {
+                await new Promise((resolve, reject) => {
+                    const s = document.createElement('script');
+                    s.src = '/engine/yaneuraou.js';
+                    s.onload = resolve;
+                    s.onerror = () => reject(new Error('script load failed'));
+                    document.head.appendChild(s);
+                });
+                await initWasmEngine();
+            } catch (e) {
+                console.warn('[WASM] ロード失敗 → JSエンジンで継続:', e.message ?? e);
+            }
+        })();
     }
     </script>
 </body>
