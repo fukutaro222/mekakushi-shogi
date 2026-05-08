@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>目隠し将棋</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -630,6 +631,111 @@
         }
         #replay-btn:hover { background: #e8b850; }
 
+        /* ── 対人戦ボタン ── */
+        #pvp-btn {
+            background: #1a2e50;
+            color: #90b8f0;
+            border: 2px solid #2a4888;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-family: inherit;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #pvp-btn:hover { background: #2a4878; color: #c0d8ff; }
+        #pvp-btn.pvp-active { background: #0a3060; border-color: #4888cc; color: #b0d4ff; }
+
+        /* ── PvP 待機オーバーレイ ── */
+        #pvp-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.78);
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+        }
+        #pvp-box {
+            background: #101828;
+            border: 2px solid #4888cc;
+            border-radius: 14px;
+            padding: 36px 44px;
+            text-align: center;
+            min-width: 300px;
+            max-width: 90vw;
+        }
+        #pvp-box-title {
+            color: #90b8f0;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            margin-bottom: 16px;
+        }
+        #pvp-status-text {
+            color: #c0c080;
+            font-size: 14px;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+            min-height: 22px;
+        }
+        #pvp-url-area {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        #pvp-url {
+            background: #0a1020;
+            border: 1px solid #4888cc;
+            border-radius: 4px;
+            color: #90b8f0;
+            font-size: 12px;
+            padding: 7px 10px;
+            word-break: break-all;
+            text-align: left;
+            width: 100%;
+        }
+        #pvp-copy-btn {
+            background: #2a4888;
+            color: #c0d8ff;
+            border: 1px solid #4888cc;
+            border-radius: 4px;
+            padding: 6px 20px;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        #pvp-copy-btn:hover { background: #3a5898; }
+        #pvp-cancel-btn {
+            background: #2e1406;
+            color: #c0a080;
+            border: 1px solid #6a3a10;
+            border-radius: 4px;
+            padding: 7px 24px;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+            margin-top: 4px;
+        }
+        #pvp-cancel-btn:hover { background: #4a2010; }
+
+        /* ── 接続インジケータ ── */
+        .pvp-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: #888;
+            margin-right: 6px;
+            vertical-align: middle;
+            transition: background 0.3s;
+        }
+        .pvp-dot.waiting  { background: #c0a040; animation: pvp-blink 1s ease-in-out infinite; }
+        .pvp-dot.connected { background: #40c060; }
+        @keyframes pvp-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
         /* ── スマホ対応 ── */
         @media (max-width: 959px) {
             .game-area {
@@ -650,6 +756,7 @@
     <h1>目隠し将棋</h1>
     <div class="top-controls">
         <button id="blind-toggle">目隠しモード OFF</button>
+        <button id="pvp-btn"><span class="pvp-dot" id="pvp-dot"></span>対人戦</button>
         <button id="resign-btn">投了</button>
         <button id="clock-toggle-btn">⏱ 時計</button>
     </div>
@@ -678,8 +785,8 @@
         </div>
 
         <div class="board-section">
-            <div class="player-row">
-                <div class="player-tag">後手（上手）</div>
+            <div class="player-row" id="gote-player-row">
+                <div class="player-tag" id="gote-label">後手（上手）</div>
                 <span class="clock-disp clock-hidden" id="gote-clock">10:00</span>
             </div>
 
@@ -691,8 +798,8 @@
                 <div class="row-nums" id="row-nums"></div>
             </div>
 
-            <div class="player-row">
-                <div class="player-tag">先手（下手）</div>
+            <div class="player-row" id="sente-player-row">
+                <div class="player-tag" id="sente-label">先手（下手）</div>
                 <span class="clock-disp clock-hidden" id="sente-clock">10:00</span>
             </div>
         </div>
@@ -720,6 +827,19 @@
         <div id="gameover-box">
             <div id="gameover-text"></div>
             <button id="replay-btn">もう一度</button>
+        </div>
+    </div>
+
+    <!-- 対人戦オーバーレイ -->
+    <div id="pvp-overlay">
+        <div id="pvp-box">
+            <div id="pvp-box-title">対人戦</div>
+            <div id="pvp-status-text">接続中...</div>
+            <div id="pvp-url-area">
+                <div id="pvp-url"></div>
+                <button id="pvp-copy-btn">URLをコピー</button>
+            </div>
+            <button id="pvp-cancel-btn">キャンセル</button>
         </div>
     </div>
 
@@ -769,6 +889,14 @@
     let senteTime     = 600;  // 秒
     let goteTime      = 600;
     let clockInterval = null;
+
+    // ── 対人戦 (PvP) ──
+    let pvpMode = false;
+    let myRole  = null;   // 'sente' | 'gote' | null
+    let peer    = null;
+    let pvpConn = null;
+
+    function myActiveRole() { return pvpMode ? myRole : 'sente'; }
 
     // ── 初期配置 ───────────────────────────────────────────────────────────────
     function initBoard() {
@@ -1229,13 +1357,178 @@
     // ── 投了 ─────────────────────────────────────────────────────────────────
 
     function onResign() {
-        if (gameOver || currentTurn !== 'sente' || computerThinking) return;
+        if (gameOver || computerThinking) return;
+        if (!pvpMode && currentTurn !== 'sente') return;
         if (!confirm('投了しますか？')) return;
-        stopClock();
-        gameOver = true;
-        document.getElementById('gameover-text').textContent = '後手の勝ちです！（先手投了）';
+        stopClock(); gameOver = true;
+        if (pvpMode) {
+            pvpSend({ type: 'resign' });
+            const winner = myRole === 'sente' ? '後手' : '先手';
+            const loser  = myRole === 'sente' ? '先手' : '後手';
+            document.getElementById('gameover-text').textContent = `${winner}の勝ちです！（${loser}投了）`;
+        } else {
+            document.getElementById('gameover-text').textContent = '後手の勝ちです！（先手投了）';
+        }
         document.getElementById('gameover-overlay').style.display = 'flex';
-        speak('先手が投了。後手の勝ちです');
+        speak('投了しました');
+    }
+
+    // ── 対人戦 P2P ──────────────────────────────────────────────────────────────
+
+    function pvpSend(data) {
+        if (pvpConn && pvpConn.open) pvpConn.send(data);
+    }
+
+    // 相手の指し手を受信して盤面に適用する
+    function pvpApplyRemoteMove(msg) {
+        const mover = msg.player;
+        currentTurn = mover;
+        if (msg.kind === 'board') {
+            executeMove(msg.fromR, msg.fromC, msg.toR, msg.toC, msg.promote, true);
+        } else {
+            executeDrop(msg.pieceType, msg.toR, msg.toC);
+        }
+        recordMove(msg.kind, msg.toR, msg.toC);
+        const result = checkPostMove(mover);
+        currentTurn = mover === 'sente' ? 'gote' : 'sente';
+        computerThinking = false;
+        if (clockEnabled && !gameOver) startClock();
+        renderAll();
+        if (result.checkmate) speak(`${result.winnerName}の勝ちです`);
+        else if (result.check) speak('王手！');
+    }
+
+    // データ受信ハンドラ
+    function pvpOnData(data) {
+        if (data.type === 'welcome') {
+            myRole = data.role;
+            pvpMode = true;
+            pvpHideOverlay();
+            updatePvpLayout();
+            initBoard();
+            renderLabels();
+            renderAll();
+            pvpSetDot('connected');
+            document.getElementById('pvp-btn').classList.add('pvp-active');
+        } else if (data.type === 'move') {
+            pvpApplyRemoteMove(data);
+        } else if (data.type === 'resign') {
+            const winner = myRole === 'sente' ? '先手' : '後手';
+            const loser  = myRole === 'sente' ? '後手' : '先手';
+            stopClock(); gameOver = true;
+            document.getElementById('gameover-text').textContent = `${winner}の勝ちです！（${loser}投了）`;
+            document.getElementById('gameover-overlay').style.display = 'flex';
+            speak(`相手が投了。${winner}の勝ちです`);
+        } else if (data.type === 'reset') {
+            gameOver = false;
+            document.getElementById('gameover-overlay').style.display = 'none';
+            initBoard(); renderLabels(); renderAll();
+        }
+    }
+
+    function pvpSetupConn(c) {
+        pvpConn = c;
+        c.on('data', pvpOnData);
+        c.on('close', () => {
+            if (!gameOver) {
+                pvpSetDot('waiting');
+                pvpShowOverlay('相手との接続が切れました', null);
+            }
+        });
+        c.on('error', e => console.error('[PvP] conn err:', e));
+    }
+
+    function pvpGenRoomId() {
+        return Math.random().toString(36).slice(2, 8);
+    }
+
+    function pvpCreateRoom() {
+        const roomId = pvpGenRoomId();
+        pvpShowOverlay('接続中...', null);
+        pvpSetDot('waiting');
+        peer = new Peer(roomId, { debug: 0 });
+        peer.on('open', id => {
+            const url = `${location.origin}${location.pathname}?room=${id}`;
+            history.pushState({}, '', `?room=${id}`);
+            pvpShowOverlay('相手の入室を待っています...', url);
+        });
+        peer.on('connection', c => {
+            pvpSetupConn(c);
+            c.on('open', () => {
+                myRole = 'sente'; pvpMode = true;
+                c.send({ type: 'welcome', role: 'gote' });
+                pvpHideOverlay();
+                updatePvpLayout();
+                initBoard(); renderLabels(); renderAll();
+                pvpSetDot('connected');
+                document.getElementById('pvp-btn').classList.add('pvp-active');
+            });
+        });
+        peer.on('error', e => {
+            console.error('[PvP] peer err:', e);
+            pvpShowOverlay(`接続エラー: ${e.type}`, null);
+        });
+    }
+
+    function pvpJoinRoom(roomId) {
+        pvpShowOverlay('ホストに接続中...', null);
+        pvpSetDot('waiting');
+        peer = new Peer({ debug: 0 });
+        peer.on('open', () => {
+            const c = peer.connect(roomId, { reliable: true });
+            pvpSetupConn(c);
+            c.on('error', e => pvpShowOverlay(`接続エラー: ${e}`));
+        });
+        peer.on('error', e => pvpShowOverlay(`エラー: ${e.type}`));
+    }
+
+    function pvpStop() {
+        pvpMode = false; myRole = null;
+        if (pvpConn) { try { pvpConn.close(); } catch(e){} pvpConn = null; }
+        if (peer)    { try { peer.destroy(); }  catch(e){} peer = null; }
+        history.pushState({}, '', location.pathname);
+        pvpHideOverlay();
+        updatePvpLayout();
+        pvpSetDot('');
+        document.getElementById('pvp-btn').classList.remove('pvp-active');
+        initBoard(); renderLabels(); renderAll();
+    }
+
+    // ── PvP UI ヘルパー ────────────────────────────────────────────────────────
+    function pvpShowOverlay(statusText, url) {
+        const ov = document.getElementById('pvp-overlay');
+        const st = document.getElementById('pvp-status-text');
+        const ua = document.getElementById('pvp-url-area');
+        const ue = document.getElementById('pvp-url');
+        st.textContent = statusText;
+        if (url) { ue.textContent = url; ua.style.display = 'flex'; }
+        else      { ua.style.display = 'none'; }
+        ov.style.display = 'flex';
+    }
+    function pvpHideOverlay() {
+        document.getElementById('pvp-overlay').style.display = 'none';
+    }
+    function pvpSetDot(state) {
+        const d = document.getElementById('pvp-dot');
+        if (d) d.className = `pvp-dot${state ? ' ' + state : ''}`;
+    }
+
+    // 後手視点フリップ時のレイアウト調整
+    function updatePvpLayout() {
+        const flipped = pvpMode && myRole === 'gote';
+        const gh = document.querySelector('.gote-hand-wrapper');
+        const sh = document.querySelector('.sente-hand-wrapper');
+        const gr = document.getElementById('gote-player-row');
+        const sr = document.getElementById('sente-player-row');
+        const gl = document.getElementById('gote-label');
+        const sl = document.getElementById('sente-label');
+        if (gh) gh.style.order = flipped ? '3' : '';
+        if (sh) sh.style.order = flipped ? '1' : '';
+        if (gr) gr.style.order = flipped ? '3' : '';
+        if (sr) sr.style.order = flipped ? '1' : '';
+        if (gl) gl.textContent = flipped ? '先手（上手・相手）' : '後手（上手）';
+        if (sl) sl.textContent = flipped ? '後手（下手・自分）' : '先手（下手）';
+        renderLabels();
     }
 
     // ── CPUエンジン（アルファベータ探索） ──────────────────────────────────────
@@ -1409,27 +1702,35 @@
 
     // ── クリック処理 ───────────────────────────────────────────────────────────
     function onCellClick(r, c) {
-        if (gameOver || blindMode || computerThinking || currentTurn !== 'sente') return;
+        if (gameOver || blindMode || computerThinking) return;
+        const me = myActiveRole();
+        if (currentTurn !== me) return;
         const p = board[r][c];
 
         // 合法手のマスをクリック → 移動/打ち
         if (legalMoves.some(([lr,lc]) => lr===r && lc===c)) {
-            const moveKind = selected.kind;
-            if (selected.kind === 'board') executeMove(selected.r, selected.c, r, c);
-            else executeDrop(selected.type, r, c);
-            recordMove(moveKind, r, c);
+            const fromR = selected.r, fromC = selected.c, dropType = selected.type, moveKind = selected.kind;
             selected = null; legalMoves = [];
-            const result = checkPostMove('sente');
+            if (moveKind === 'board') {
+                executeMove(fromR, fromC, r, c);
+                if (pvpMode) pvpSend({ type:'move', kind:'board', player:me, fromR, fromC, toR:r, toC:c, promote: board[r][c].promoted });
+            } else {
+                executeDrop(dropType, r, c);
+                if (pvpMode) pvpSend({ type:'move', kind:'drop', player:me, pieceType:dropType, toR:r, toC:c });
+            }
+            recordMove(moveKind, r, c);
+            const result = checkPostMove(me);
+            const opp = me === 'sente' ? 'gote' : 'sente';
             if (result.checkmate) { speak(`${result.winnerName}の勝ちです`); renderAll(); return; }
             if (result.check) speak('王手！');
-            currentTurn = 'gote';
+            currentTurn = opp;
             renderAll();
-            triggerComputerMove();
+            if (!pvpMode) triggerComputerMove();
             return;
         }
 
         // 自分の駒をクリック → 選択 or 解除
-        if (p && p.player === 'sente') {
+        if (p && p.player === me) {
             if (selected?.kind === 'board' && selected.r === r && selected.c === c) {
                 selected = null; legalMoves = [];
             } else {
@@ -1446,7 +1747,8 @@
     }
 
     function onHandPieceClick(type, player) {
-        if (gameOver || blindMode || computerThinking || currentTurn !== 'sente' || player !== 'sente') return;
+        const me = myActiveRole();
+        if (gameOver || blindMode || computerThinking || currentTurn !== me || player !== me) return;
         if (selected?.kind === 'hand' && selected.type === type) {
             selected = null; legalMoves = [];
         } else {
@@ -1519,9 +1821,12 @@
     function renderBoard() {
         const tbl = document.getElementById('shogi-board');
         tbl.innerHTML = '';
-        for (let r = 0; r < 9; r++) {
+        const flipped = pvpMode && myRole === 'gote';
+        for (let vr = 0; vr < 9; vr++) {
+            const r = flipped ? 8 - vr : vr;
             const tr = document.createElement('tr');
-            for (let c = 0; c < 9; c++) {
+            for (let vc = 0; vc < 9; vc++) {
+                const c = flipped ? 8 - vc : vc;
                 const td = document.createElement('td');
                 const p  = board[r][c];
                 const isSelected  = selected?.kind === 'board' && selected.r === r && selected.c === c;
@@ -1559,18 +1864,21 @@
     }
 
     function renderLabels() {
+        const flipped = pvpMode && myRole === 'gote';
         const colDiv = document.getElementById('col-nums');
         colDiv.innerHTML = '';
-        for (let i = 9; i >= 1; i--) {
+        const cols = flipped ? [1,2,3,4,5,6,7,8,9] : [9,8,7,6,5,4,3,2,1];
+        for (const i of cols) {
             const s = document.createElement('span');
             s.className = 'lbl'; s.textContent = i;
             colDiv.appendChild(s);
         }
         const rowDiv = document.getElementById('row-nums');
         rowDiv.innerHTML = '';
-        for (let i = 0; i < 9; i++) {
+        const rows = flipped ? [...ROW_KANJI].reverse() : ROW_KANJI;
+        for (const k of rows) {
             const s = document.createElement('span');
-            s.className = 'lbl'; s.textContent = ROW_KANJI[i];
+            s.className = 'lbl'; s.textContent = k;
             rowDiv.appendChild(s);
         }
     }
@@ -1902,22 +2210,24 @@
         }
     }
 
-    // 解析結果をもとに先手の合法手を探して実行
+    // 解析結果をもとに現在プレイヤーの合法手を探して実行
+    // 成功時: { fromR, fromC } (board move) または { isDrop: true } を返す。失敗時: null
     function findAndExecuteVoiceMove({ c, r, dir, baseType, isPromoted, isDrop, forcePromote }) {
         console.log('[Voice] findAndExecute:', { c, r, dir, baseType, isPromoted, isDrop });
-        if (r < 0 || r > 8 || c < 0 || c > 8) return false;
+        if (r < 0 || r > 8 || c < 0 || c > 8) return null;
+        const activeHand = currentTurn === 'sente' ? senteHand : goteHand;
 
         // 「打」明示
         if (isDrop) {
-            if (!baseType || (senteHand[baseType] ?? 0) <= 0) return false;
-            const dm = getDropMoves(baseType, 'sente');
-            if (!dm.some(([dr,dc]) => dr===r && dc===c)) return false;
-            board[r][c] = { type: baseType, player: 'sente', promoted: false };
-            const wouldCheck = isInCheck('sente');
+            if (!baseType || (activeHand[baseType] ?? 0) <= 0) return null;
+            const dm = getDropMoves(baseType, currentTurn);
+            if (!dm.some(([dr,dc]) => dr===r && dc===c)) return null;
+            board[r][c] = { type: baseType, player: currentTurn, promoted: false };
+            const wouldCheck = isInCheck(currentTurn);
             board[r][c] = null;
-            if (wouldCheck) return false;
+            if (wouldCheck) return null;
             executeDrop(baseType, r, c);
-            return true;
+            return { isDrop: true };
         }
 
         // 盤上の候補を集める（王手を残す手は除外）
@@ -1925,7 +2235,7 @@
         for (let fr = 0; fr < 9; fr++) {
             for (let fc = 0; fc < 9; fc++) {
                 const p = board[fr][fc];
-                if (!p || p.player !== 'sente') continue;
+                if (!p || p.player !== currentTurn) continue;
                 if (baseType && p.type !== baseType) continue;
                 if (baseType && p.promoted !== isPromoted) continue;
                 if (getLegalMovesStrict(fr, fc).some(([mr,mc]) => mr===r && mc===c)) {
@@ -1935,42 +2245,44 @@
         }
         console.log('[Voice] candidates:', cands);
 
-        // 方向修飾子で絞り込む
         const filtered = dir
             ? cands.filter(({ fr, fc }) => matchesDirection(fr, fc, r, c, dir))
             : cands;
         console.log('[Voice] filtered by dir:', filtered);
 
         if (filtered.length === 1) {
-            executeMove(filtered[0].fr, filtered[0].fc, r, c, forcePromote);
-            return true;
+            const { fr, fc } = filtered[0];
+            executeMove(fr, fc, r, c, forcePromote);
+            return { fromR: fr, fromC: fc };
         }
         if (filtered.length > 1) {
-            if (baseType) { console.log('[Voice] 曖昧: 複数候補'); return false; }
-            executeMove(filtered[0].fr, filtered[0].fc, r, c, forcePromote);
-            return true;
+            if (baseType) { console.log('[Voice] 曖昧: 複数候補'); return null; }
+            const { fr, fc } = filtered[0];
+            executeMove(fr, fc, r, c, forcePromote);
+            return { fromR: fr, fromC: fc };
         }
 
-        // 持ち駒からの暗黙の打ち（「同」でdirなしの場合のみ）
-        if (!dir && baseType && !isPromoted && (senteHand[baseType] ?? 0) > 0) {
-            const dm = getDropMoves(baseType, 'sente');
+        // 持ち駒からの暗黙の打ち
+        if (!dir && baseType && !isPromoted && (activeHand[baseType] ?? 0) > 0) {
+            const dm = getDropMoves(baseType, currentTurn);
             if (dm.some(([dr,dc]) => dr===r && dc===c)) {
-                board[r][c] = { type: baseType, player: 'sente', promoted: false };
-                const wouldCheck = isInCheck('sente');
+                board[r][c] = { type: baseType, player: currentTurn, promoted: false };
+                const wouldCheck = isInCheck(currentTurn);
                 board[r][c] = null;
-                if (!wouldCheck) { executeDrop(baseType, r, c); return true; }
+                if (!wouldCheck) { executeDrop(baseType, r, c); return { isDrop: true }; }
             }
         }
 
         console.log('[Voice] 合法手なし');
-        return false;
+        return null;
     }
 
     // 音声/手動入力の共通処理
     function tryVoiceMove(text) {
         if (moveExecuted) return;
-        if (gameOver || currentTurn !== 'sente' || computerThinking) {
-            setVoiceText('先手番ではありません', false);
+        const me = myActiveRole();
+        if (gameOver || currentTurn !== me || computerThinking) {
+            setVoiceText('あなたの手番ではありません', false);
             return;
         }
         console.log('[Voice] tryVoiceMove:', text);
@@ -1979,27 +2291,35 @@
             setVoiceText(`"${text.trim()}" — 解析できません`, false);
             return;
         }
-        const ok = findAndExecuteVoiceMove(parsed);
-        if (ok) {
+        const result = findAndExecuteVoiceMove(parsed);
+        if (result) {
             moveExecuted = true;
             stopListening();
             setVoiceText(`${parsed.displayText} ✓`, false);
             recordMove(parsed.isDrop ? 'drop' : 'board', parsed.r, parsed.c);
-            const result = checkPostMove('sente');
-            if (result.checkmate) {
-                speak(`${result.winnerName}の勝ちです`);
-                currentTurn = 'gote';
+            if (pvpMode) {
+                if (result.isDrop) {
+                    pvpSend({ type:'move', kind:'drop', player:me, pieceType:parsed.baseType, toR:parsed.r, toC:parsed.c });
+                } else {
+                    pvpSend({ type:'move', kind:'board', player:me, fromR:result.fromR, fromC:result.fromC, toR:parsed.r, toC:parsed.c, promote: board[parsed.r][parsed.c].promoted });
+                }
+            }
+            const postResult = checkPostMove(me);
+            const opp = me === 'sente' ? 'gote' : 'sente';
+            if (postResult.checkmate) {
+                speak(`${postResult.winnerName}の勝ちです`);
+                currentTurn = opp;
                 renderAll();
                 return;
             }
             const moveTxt = blindMode
                 ? (() => { const p = board[parsed.r][parsed.c]; return `${9 - parsed.c}${ROW_KANJI[parsed.r]}${pieceKanji(p)}に移動しました`; })()
                 : '';
-            if (result.check) speak(moveTxt ? moveTxt + '。王手！' : '王手！');
+            if (postResult.check) speak(moveTxt ? moveTxt + '。王手！' : '王手！');
             else if (moveTxt) speak(moveTxt);
-            currentTurn = 'gote';
+            currentTurn = opp;
             renderAll();
-            triggerComputerMove();
+            if (!pvpMode) triggerComputerMove();
         } else {
             setVoiceText(`${text.trim()} — 合法手なし`, false);
         }
@@ -2045,9 +2365,8 @@
     // 「もう一度」ボタン
     document.getElementById('replay-btn')?.addEventListener('click', () => {
         document.getElementById('gameover-overlay').style.display = 'none';
-        initBoard();
-        renderLabels();
-        renderAll();
+        if (pvpMode) pvpSend({ type: 'reset' });
+        initBoard(); renderLabels(); renderAll();
     });
 
     // 投了ボタン
@@ -2055,6 +2374,39 @@
 
     // 時計トグル
     document.getElementById('clock-toggle-btn')?.addEventListener('click', toggleClock);
+
+    // 対人戦ボタン
+    document.getElementById('pvp-btn')?.addEventListener('click', () => {
+        if (pvpMode) { pvpStop(); return; }
+        pvpCreateRoom();
+    });
+
+    // URLコピーボタン
+    document.getElementById('pvp-copy-btn')?.addEventListener('click', () => {
+        const url = document.getElementById('pvp-url')?.textContent;
+        if (!url) return;
+        navigator.clipboard.writeText(url).then(() => {
+            const btn = document.getElementById('pvp-copy-btn');
+            const orig = btn.textContent;
+            btn.textContent = 'コピーしました！';
+            setTimeout(() => { btn.textContent = orig; }, 1500);
+        }).catch(() => {
+            // clipboard API が使えない場合の fallback
+            const inp = document.createElement('input');
+            inp.value = url; document.body.appendChild(inp);
+            inp.select(); document.execCommand('copy');
+            document.body.removeChild(inp);
+        });
+    });
+
+    // キャンセルボタン
+    document.getElementById('pvp-cancel-btn')?.addEventListener('click', pvpStop);
+
+    // URLに ?room= パラメータがあれば自動参加（ゲストとして入室）
+    const roomParam = new URLSearchParams(location.search).get('room');
+    if (roomParam) {
+        pvpJoinRoom(roomParam);
+    }
 
     // CPUレベル選択
     document.querySelectorAll('.lv-btn').forEach(btn => {
