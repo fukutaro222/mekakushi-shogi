@@ -7,6 +7,11 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        :root {
+            /* 盤マス幅: 画面幅に応じて36〜62pxで自動調整 */
+            --cell: clamp(36px, calc((100vw - 56px) / 9), 62px);
+        }
+
         body {
             font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'MS Mincho', serif;
             background: #b89060;
@@ -83,7 +88,7 @@
         }
 
         .row-nums .lbl {
-            height: 62px;
+            height: var(--cell);
             display: flex;
             align-items: center;
             justify-content: flex-start;
@@ -104,7 +109,7 @@
         }
 
         .col-nums .lbl {
-            width: 62px;
+            width: var(--cell);
             text-align: center;
             font-size: 11px;
             color: #2e1406;
@@ -123,8 +128,8 @@
         }
 
         #shogi-board td {
-            width: 62px;
-            height: 62px;
+            width: var(--cell);
+            height: var(--cell);
             border: 1px solid #9a7020;
             text-align: center;
             vertical-align: middle;
@@ -144,8 +149,8 @@
         #shogi-board td.movable::after {
             content: '';
             position: absolute;
-            width: 20px;
-            height: 20px;
+            width: calc(var(--cell) * 0.32);
+            height: calc(var(--cell) * 0.32);
             background: rgba(60,210,60,0.7);
             border-radius: 50%;
             top: 50%;
@@ -174,12 +179,12 @@
         }
 
         .piece {
-            width: 50px;
-            height: 54px;
+            width: calc(var(--cell) * 0.81);
+            height: calc(var(--cell) * 0.87);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 21px;
+            font-size: calc(var(--cell) * 0.34);
             font-weight: bold;
             color: #120600;
             background: #f4e09a;
@@ -387,10 +392,86 @@
             font-family: inherit;
             letter-spacing: 2px;
             cursor: pointer;
-            margin-bottom: 10px;
             transition: background 0.15s, color 0.15s, border-color 0.15s;
         }
         #blind-toggle:hover { background: #4a2010; color: #f0ddb0; }
+
+        /* ── 上部コントロール群 ── */
+        .top-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        #resign-btn {
+            background: #3a0000;
+            color: #f0c0b0;
+            border: 2px solid #7a1000;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-family: inherit;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        #resign-btn:hover { background: #620000; }
+        #resign-btn:disabled { opacity: 0.4; cursor: default; }
+
+        #clock-toggle-btn {
+            background: #2e1406;
+            color: #a09070;
+            border: 2px solid #4a2808;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #clock-toggle-btn:hover { background: #4a2010; color: #f0ddb0; }
+        #clock-toggle-btn.active {
+            background: #1a3050;
+            border-color: #4090cc;
+            color: #a0ccf0;
+        }
+
+        /* ── 対局時計 ── */
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .clock-disp {
+            background: #100800;
+            color: #f0ddb0;
+            font-size: 18px;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 2px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            border: 1px solid #6a3a10;
+            min-width: 68px;
+            text-align: center;
+        }
+        .clock-disp.clock-hidden { display: none; }
+        .clock-disp.clock-active {
+            border-color: #c89840;
+            box-shadow: 0 0 8px rgba(200,152,64,0.5);
+        }
+        .clock-disp.clock-warning {
+            color: #ff5533;
+            border-color: #cc2200;
+            animation: clock-blink 0.8s ease-in-out infinite;
+        }
+        @keyframes clock-blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
 
         /* ── CPUレベル選択 ── */
         .level-bar {
@@ -548,11 +629,30 @@
             transition: background 0.15s;
         }
         #replay-btn:hover { background: #e8b850; }
+
+        /* ── スマホ対応 ── */
+        @media (max-width: 959px) {
+            .game-area {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            .gote-hand-wrapper  { order: 1; width: min(100%, 560px); }
+            .board-section      { order: 2; }
+            .sente-hand-wrapper { order: 3; width: min(100%, 560px); }
+            .kifu-wrapper       { order: 4; width: min(100%, 560px); }
+            .hand { min-height: auto; width: 100%; }
+            .kifu-panel { max-height: 80px; width: 100%; }
+        }
     </style>
 </head>
 <body>
     <h1>目隠し将棋</h1>
-    <button id="blind-toggle">目隠しモード OFF</button>
+    <div class="top-controls">
+        <button id="blind-toggle">目隠しモード OFF</button>
+        <button id="resign-btn">投了</button>
+        <button id="clock-toggle-btn">⏱ 時計</button>
+    </div>
     <div class="level-bar">
         <span class="level-label">CPU強さ：</span>
         <div class="level-btns" id="level-btns">
@@ -578,7 +678,10 @@
         </div>
 
         <div class="board-section">
-            <div class="player-tag">後手（上手）</div>
+            <div class="player-row">
+                <div class="player-tag">後手（上手）</div>
+                <span class="clock-disp clock-hidden" id="gote-clock">10:00</span>
+            </div>
 
             <div class="board-layout">
                 <div class="board-col-wrap">
@@ -588,7 +691,10 @@
                 <div class="row-nums" id="row-nums"></div>
             </div>
 
-            <div class="player-tag">先手（下手）</div>
+            <div class="player-row">
+                <div class="player-tag">先手（下手）</div>
+                <span class="clock-disp clock-hidden" id="sente-clock">10:00</span>
+            </div>
         </div>
 
         <!-- 先手の持ち駒（右下） -->
@@ -658,6 +764,12 @@
     let inCheck   = false; // 現在の手番側が王手を受けているか
     let kifu      = [];    // 棋譜エントリ文字列配列
 
+    // ── 対局時計 ──
+    let clockEnabled  = false;
+    let senteTime     = 600;  // 秒
+    let goteTime      = 600;
+    let clockInterval = null;
+
     // ── 初期配置 ───────────────────────────────────────────────────────────────
     function initBoard() {
         board = Array.from({length: 9}, () => Array(9).fill(null));
@@ -675,6 +787,9 @@
         senteHand = {}; goteHand = {};
         currentTurn = 'sente'; selected = null; legalMoves = []; computerThinking = false;
         lastMoveDest = null; gameOver = false; inCheck = false; kifu = [];
+        senteTime = 600; goteTime = 600;
+        stopClock();
+        if (clockEnabled) startClock();
     }
 
     function pieceKanji(p) {
@@ -843,6 +958,7 @@
         const oppMoves = getAllLegalMovesStrict(opp);
         if (oppMoves.length === 0) {
             gameOver = true;
+            stopClock();
             const winnerName = movedPlayer === 'sente' ? '先手' : '後手';
             document.getElementById('gameover-text').textContent = `${winnerName}の勝ちです！`;
             document.getElementById('gameover-overlay').style.display = 'flex';
@@ -1042,6 +1158,84 @@
                 if (bestMoveResolve) { bestMoveResolve = null; reject(new Error('timeout')); }
             }, 60000);
         });
+    }
+
+    // ── 対局時計 ──────────────────────────────────────────────────────────────
+
+    function formatTime(s) {
+        const m = Math.floor(s / 60);
+        return `${m}:${String(s % 60).padStart(2, '0')}`;
+    }
+
+    function renderClock() {
+        const se = document.getElementById('sente-clock');
+        const ge = document.getElementById('gote-clock');
+        if (!se || !ge) return;
+        se.textContent = formatTime(senteTime);
+        ge.textContent = formatTime(goteTime);
+        se.classList.toggle('clock-hidden', !clockEnabled);
+        ge.classList.toggle('clock-hidden', !clockEnabled);
+        if (!clockEnabled) {
+            se.classList.remove('clock-active', 'clock-warning');
+            ge.classList.remove('clock-active', 'clock-warning');
+            return;
+        }
+        const isSenteTurn = currentTurn === 'sente' && !computerThinking && !gameOver;
+        const isGoteTurn  = !isSenteTurn && !gameOver;
+        se.classList.toggle('clock-active',  isSenteTurn);
+        ge.classList.toggle('clock-active',  isGoteTurn);
+        se.classList.toggle('clock-warning', isSenteTurn && senteTime <= 30);
+        ge.classList.toggle('clock-warning', isGoteTurn  && goteTime  <= 30);
+    }
+
+    function stopClock() {
+        if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+    }
+
+    function startClock() {
+        stopClock();
+        if (!clockEnabled || gameOver) return;
+        clockInterval = setInterval(() => {
+            if (gameOver) { stopClock(); return; }
+            if (currentTurn === 'sente' && !computerThinking) {
+                senteTime--;
+                if (senteTime <= 0) { senteTime = 0; stopClock(); onTimeout('sente'); return; }
+            } else {
+                goteTime--;
+                if (goteTime <= 0) { goteTime = 0; stopClock(); onTimeout('gote'); return; }
+            }
+            renderClock();
+        }, 1000);
+    }
+
+    function onTimeout(player) {
+        gameOver = true;
+        const winner = player === 'sente' ? '後手' : '先手';
+        const loser  = player === 'sente' ? '先手' : '後手';
+        document.getElementById('gameover-text').textContent = `${winner}の勝ちです！（${loser}時間切れ）`;
+        document.getElementById('gameover-overlay').style.display = 'flex';
+        renderClock();
+        speak(`${loser}の時間切れ。${winner}の勝ちです`);
+    }
+
+    function toggleClock() {
+        clockEnabled = !clockEnabled;
+        document.getElementById('clock-toggle-btn')?.classList.toggle('active', clockEnabled);
+        if (clockEnabled && !gameOver) startClock();
+        else stopClock();
+        renderClock();
+    }
+
+    // ── 投了 ─────────────────────────────────────────────────────────────────
+
+    function onResign() {
+        if (gameOver || currentTurn !== 'sente' || computerThinking) return;
+        if (!confirm('投了しますか？')) return;
+        stopClock();
+        gameOver = true;
+        document.getElementById('gameover-text').textContent = '後手の勝ちです！（先手投了）';
+        document.getElementById('gameover-overlay').style.display = 'flex';
+        speak('先手が投了。後手の勝ちです');
     }
 
     // ── CPUエンジン（アルファベータ探索） ──────────────────────────────────────
@@ -1310,6 +1504,7 @@
         renderTurnIndicator();
         renderCheckBanner();
         renderKifu();
+        renderClock();
     }
 
     function renderTurnIndicator() {
@@ -1854,6 +2049,12 @@
         renderLabels();
         renderAll();
     });
+
+    // 投了ボタン
+    document.getElementById('resign-btn')?.addEventListener('click', onResign);
+
+    // 時計トグル
+    document.getElementById('clock-toggle-btn')?.addEventListener('click', toggleClock);
 
     // CPUレベル選択
     document.querySelectorAll('.lv-btn').forEach(btn => {
