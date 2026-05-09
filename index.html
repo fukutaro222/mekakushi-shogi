@@ -1857,8 +1857,12 @@
                     const filt = document.createElement('div');
                     filt.className = 'piece-filter';
                     const el = document.createElement('div');
-                    el.className = `piece ${p.player}${p.promoted ? ' promoted' : ''}`;
-                    if (p.player === 'gote') {
+                    // 後手視点フリップ時: 自分(後手)=sente見た目, 相手(先手)=gote見た目
+                    const dispClass = flipped
+                        ? (p.player === 'gote' ? 'sente' : 'gote')
+                        : p.player;
+                    el.className = `piece ${dispClass}${p.promoted ? ' promoted' : ''}`;
+                    if (dispClass === 'gote') {
                         const span = document.createElement('span');
                         span.className = 'piece-text';
                         span.textContent = pieceKanji(p);
