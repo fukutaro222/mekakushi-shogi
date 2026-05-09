@@ -279,6 +279,11 @@
             color: #555;
         }
 
+        .hand-piece-item .gote-kanji {
+            display: inline-block;
+            transform: rotate(180deg);
+        }
+
         /* ── 音声操作バー ── */
         .voice-bar {
             display: flex;
@@ -1913,7 +1918,14 @@
             const isSelected = selected?.kind === 'hand' && selected.type === type && currentTurn === player;
             const item = document.createElement('div');
             item.className = 'hand-piece-item' + (isSelected ? ' selected-hand' : '');
-            item.textContent = KANJI[type] ?? type;
+            if (player === 'gote') {
+                const span = document.createElement('span');
+                span.className = 'gote-kanji';
+                span.textContent = KANJI[type] ?? type;
+                item.appendChild(span);
+            } else {
+                item.textContent = KANJI[type] ?? type;
+            }
             if (cnt > 1) {
                 const badge = document.createElement('span');
                 badge.className = 'cnt'; badge.textContent = cnt;
