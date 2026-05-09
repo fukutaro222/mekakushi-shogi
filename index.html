@@ -748,6 +748,33 @@
         .pvp-dot.connected { background: #40c060; }
         @keyframes pvp-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
 
+        /* ── フラッシュバナー（対局開始・勝敗結果） ── */
+        #flash-banner {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 46px;
+            font-weight: bold;
+            letter-spacing: 8px;
+            pointer-events: none;
+            z-index: 500;
+            opacity: 0;
+            text-shadow: 0 2px 20px rgba(0,0,0,0.8);
+        }
+        #flash-banner.start { color: #f0ddb0; }
+        #flash-banner.win   { color: #ffd700; }
+        #flash-banner.lose  { color: #90b8d8; }
+        #flash-banner.active { animation: flash-anim 2s ease forwards; }
+        @keyframes flash-anim {
+            0%   { opacity: 0; transform: scale(0.55); }
+            15%  { opacity: 1; transform: scale(1.1); }
+            50%  { opacity: 1; transform: scale(1); }
+            80%  { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(1.06); }
+        }
+
         /* ── スマホ対応 ── */
         @media (max-width: 959px) {
             .game-area {
@@ -843,6 +870,9 @@
             <button id="replay-btn">もう一度</button>
         </div>
     </div>
+
+    <!-- フラッシュバナー -->
+    <div id="flash-banner"></div>
 
     <!-- 対人戦オーバーレイ -->
     <div id="pvp-overlay">
@@ -1102,8 +1132,7 @@
             gameOver = true;
             stopClock();
             const winnerName = movedPlayer === 'sente' ? '先手' : '後手';
-            document.getElementById('gameover-text').textContent = `${winnerName}の勝ちです！`;
-            document.getElementById('gameover-overlay').style.display = 'flex';
+            showEndGame(`${winnerName}の勝ちです！`, movedPlayer);
             return { checkmate: true, check: false, winnerName };
         }
         const check = isInCheck(opp);
@@ -1352,12 +1381,16 @@
 
     function onTimeout(player) {
         gameOver = true;
-        const winner = player === 'sente' ? '後手' : '先手';
-        const loser  = player === 'sente' ? '先手' : '後手';
-        document.getElementById('gameover-text').textContent = `${winner}の勝ちです！（${loser}時間切れ）`;
-        document.getElementById('gameover-overlay').style.display = 'flex';
+        const winnerRole = player === 'sente' ? 'gote' : 'sente';
+        const winner = winnerRole === 'sente' ? '先手' : '後手';
+        const loser  = player  === 'sente' ? '先手' : '後手';
         renderClock();
-        speak(`${loser}の時間切れ。${winner}の勝ちです`);
+        const iWon = iWonAs(winnerRole);
+        showEndGame(
+            `${winner}の勝ちです！（${loser}時間切れ）`,
+            winnerRole,
+            `${loser}の時間切れ。${winner}の勝ちです。${iWon ? 'おめでとうございます' : 'お疲れ様でした'}`
+        );
     }
 
     function toggleClock() {
@@ -1377,14 +1410,13 @@
         stopClock(); gameOver = true;
         if (pvpMode) {
             pvpSend({ type: 'resign' });
-            const winner = myRole === 'sente' ? '後手' : '先手';
-            const loser  = myRole === 'sente' ? '先手' : '後手';
-            document.getElementById('gameover-text').textContent = `${winner}の勝ちです！（${loser}投了）`;
+            const winnerRole = myRole === 'sente' ? 'gote' : 'sente';
+            const winner = winnerRole === 'sente' ? '先手' : '後手';
+            const loser  = myRole   === 'sente' ? '先手' : '後手';
+            showEndGame(`${winner}の勝ちです！（${loser}投了）`, winnerRole, 'お疲れ様でした');
         } else {
-            document.getElementById('gameover-text').textContent = '後手の勝ちです！（先手投了）';
+            showEndGame('後手の勝ちです！（先手投了）', 'gote', 'お疲れ様でした');
         }
-        document.getElementById('gameover-overlay').style.display = 'flex';
-        speak('投了しました');
     }
 
     // ── 対人戦 P2P ──────────────────────────────────────────────────────────────
@@ -1408,8 +1440,7 @@
         computerThinking = false;
         if (clockEnabled && !gameOver) startClock();
         renderAll();
-        if (result.checkmate) speak(`${result.winnerName}の勝ちです`);
-        else if (result.check) speak('王手！');
+        if (!result.checkmate && result.check) speak('王手！');
     }
 
     // データ受信ハンドラ
@@ -1424,15 +1455,20 @@
             renderAll();
             pvpSetDot('connected');
             document.getElementById('pvp-btn').classList.add('pvp-active');
+            showFlashBanner('対局開始！', 'start');
+            speak('相手が入室しました。対局を開始します');
         } else if (data.type === 'move') {
             pvpApplyRemoteMove(data);
         } else if (data.type === 'resign') {
-            const winner = myRole === 'sente' ? '先手' : '後手';
-            const loser  = myRole === 'sente' ? '後手' : '先手';
+            const winnerRole = myRole === 'sente' ? 'sente' : 'gote';
+            const winner = winnerRole === 'sente' ? '先手' : '後手';
+            const loser  = winnerRole === 'sente' ? '後手' : '先手';
             stopClock(); gameOver = true;
-            document.getElementById('gameover-text').textContent = `${winner}の勝ちです！（${loser}投了）`;
-            document.getElementById('gameover-overlay').style.display = 'flex';
-            speak(`相手が投了。${winner}の勝ちです`);
+            showEndGame(
+                `${winner}の勝ちです！（${loser}投了）`,
+                winnerRole,
+                `相手が投了。${winner}の勝ちです。おめでとうございます`
+            );
         } else if (data.type === 'reset') {
             gameOver = false;
             document.getElementById('gameover-overlay').style.display = 'none';
@@ -1476,6 +1512,8 @@
                 initBoard(); renderLabels(); renderAll();
                 pvpSetDot('connected');
                 document.getElementById('pvp-btn').classList.add('pvp-active');
+                showFlashBanner('対局開始！', 'start');
+                speak('相手が入室しました。対局を開始します');
             });
         });
         peer.on('error', e => {
@@ -1654,7 +1692,7 @@
 
     function announceMove(result, computerMoveText) {
         if (result.checkmate) {
-            speak(`${result.winnerName}の勝ちです`);
+            // speak は checkPostMove 内の showEndGame で処理済み
         } else {
             const moveTxt = blindMode && computerMoveText
                 ? `コンピューターが${computerMoveText}と指しました` : '';
@@ -1735,7 +1773,7 @@
             recordMove(moveKind, r, c);
             const result = checkPostMove(me);
             const opp = me === 'sente' ? 'gote' : 'sente';
-            if (result.checkmate) { speak(`${result.winnerName}の勝ちです`); renderAll(); return; }
+            if (result.checkmate) { renderAll(); return; }
             if (result.check) speak('王手！');
             currentTurn = opp;
             renderAll();
@@ -1938,6 +1976,37 @@
             item.addEventListener('click', () => onHandPieceClick(type, player));
             div.appendChild(item);
         }
+    }
+
+    // ── 演出ヘルパー ──────────────────────────────────────────────────────────
+
+    function showFlashBanner(text, type) {
+        const el = document.getElementById('flash-banner');
+        if (!el) return;
+        el.textContent = text;
+        el.className = type;
+        el.offsetHeight; // reflow でアニメーションをリセット
+        el.classList.add('active');
+        setTimeout(() => { el.className = ''; }, 2300);
+    }
+
+    // 勝者ロール ('sente'|'gote') に対して「自分が勝ったか」を返す
+    function iWonAs(winnerRole) {
+        if (pvpMode) return winnerRole === myRole;
+        return winnerRole === 'sente'; // CPU対局: 自分は先手
+    }
+
+    // ゲーム終了演出（フラッシュ → 1.4秒後にオーバーレイ）
+    function showEndGame(overlayText, winnerRole, speakOverride) {
+        const iWon = iWonAs(winnerRole);
+        const resultMsg = iWon ? 'おめでとうございます' : 'お疲れ様でした';
+        const winnerName = winnerRole === 'sente' ? '先手' : '後手';
+        showFlashBanner(resultMsg, iWon ? 'win' : 'lose');
+        document.getElementById('gameover-text').textContent = overlayText;
+        setTimeout(() => {
+            document.getElementById('gameover-overlay').style.display = 'flex';
+        }, 1400);
+        speak(speakOverride ?? `${winnerName}の勝ちです。${resultMsg}`);
     }
 
     // ── 音声合成（読み上げ） ───────────────────────────────────────────────────
@@ -2314,6 +2383,7 @@
         const parsed = parseVoiceMove(text);
         if (!parsed) {
             setVoiceText(`"${text.trim()}" — 解析できません`, false);
+            speak('もう一度おっしゃってください');
             return;
         }
         const result = findAndExecuteVoiceMove(parsed);
@@ -2332,7 +2402,7 @@
             const postResult = checkPostMove(me);
             const opp = me === 'sente' ? 'gote' : 'sente';
             if (postResult.checkmate) {
-                speak(`${postResult.winnerName}の勝ちです`);
+                // speak は showEndGame で処理済み
                 currentTurn = opp;
                 renderAll();
                 return;
@@ -2347,6 +2417,7 @@
             if (!pvpMode) triggerComputerMove();
         } else {
             setVoiceText(`${text.trim()} — 合法手なし`, false);
+            speak('その手は指せません');
         }
     }
 
