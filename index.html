@@ -3403,22 +3403,50 @@
         });
     }
 
+    const PROFILE_DEFAULT = { nickname: null, rating: 1200, rank: '3級', rank_achievement: 0 };
+
     async function fetchOrCreateProfile(userId) {
+        console.log('[Profile] 取得開始:', userId);
         const { data, error } = await sb
             .from('profiles')
             .select('nickname, rating, rank, rank_achievement')
             .eq('id', userId)
             .single();
-        if (error && (error.code === 'PGRST116' || error.code === '406')) {
-            await sb.from('profiles').insert({ id: userId, nickname: null, rating: 1200, rank: '3級', rank_achievement: 0 });
-            return { nickname: null, rating: 1200, rank: '3級', rank_achievement: 0 };
+        console.log('[Profile] 取得結果 - data:', data, 'error:', error?.code, error?.message);
+
+        if (!error) return data ?? PROFILE_DEFAULT;
+
+        // 行が存在しない → 新規作成
+        if (error.code === 'PGRST116' || error.code === '406') {
+            console.log('[Profile] 新規作成中...');
+            const { error: ie } = await sb.from('profiles')
+                .insert({ id: userId, ...PROFILE_DEFAULT });
+            if (ie) console.warn('[Profile] 作成エラー (無視):', ie.code, ie.message);
+            return PROFILE_DEFAULT;
         }
-        return data ?? { nickname: null, rating: 1200, rank: '3級', rank_achievement: 0 };
+
+        // RLS違反・その他エラーはデフォルト値で続行
+        console.warn('[Profile] エラー (デフォルト値使用):', error.code, error.message);
+        return PROFILE_DEFAULT;
     }
 
     async function onAuthSuccess(session) {
+        console.log('[Auth] onAuthSuccess 開始:', session?.user?.email);
         const user = session.user;
-        const profile = await fetchOrCreateProfile(user.id);
+
+        // プロファイル取得（8秒タイムアウト付き・失敗してもデフォルト値で続行）
+        console.log('[Auth] プロファイル取得中...');
+        let profile = PROFILE_DEFAULT;
+        try {
+            profile = await Promise.race([
+                fetchOrCreateProfile(user.id),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('profile timeout')), 8000))
+            ]);
+        } catch (e) {
+            console.warn('[Auth] プロファイル取得失敗 (デフォルト値使用):', e.message);
+        }
+        console.log('[Auth] プロファイル:', profile);
+
         currentUser = {
             id: user.id, email: user.email,
             nickname: profile.nickname,
@@ -3426,11 +3454,19 @@
             rank: profile.rank ?? ratingToRank(profile.rating ?? 1200),
             rank_achievement: profile.rank_achievement ?? 0,
         };
+        console.log('[Auth] currentUser 設定完了');
+
         document.getElementById('auth-overlay').classList.remove('visible');
         document.getElementById('user-bar').classList.add('visible');
         updateUserBar();
         updateTitleAuth();
-        if (!currentUser.nickname) showNicknameModal(true);
+        console.log('[Auth] UI更新完了');
+
+        if (!currentUser.nickname) {
+            console.log('[Auth] ニックネームモーダル表示');
+            showNicknameModal(true);
+        }
+        console.log('[Auth] onAuthSuccess 完了');
     }
 
     function updateUserBar() {
@@ -3590,23 +3626,29 @@
             btn.disabled = true;
             console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
 
-            const timeout = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('タイムアウト: サーバーからの応答がありませんでした')), 10000)
+            const makeTimeout = (ms, msg) => new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(msg)), ms)
             );
 
             try {
                 if (authIsLogin) {
+                    console.log('[Auth] signInWithPassword 呼び出し...');
                     const { data, error } = await Promise.race([
                         sb.auth.signInWithPassword({ email, password }),
-                        timeout
+                        makeTimeout(10000, 'タイムアウト: サーバーからの応答がありませんでした')
                     ]);
                     console.log('[Auth] signIn data:', data, 'error:', error);
                     if (error) throw error;
-                    await onAuthSuccess(data.session);
+                    console.log('[Auth] ログイン成功。onAuthSuccess 呼び出し...');
+                    await Promise.race([
+                        onAuthSuccess(data.session),
+                        makeTimeout(15000, 'タイムアウト: ログイン後の処理が完了しませんでした')
+                    ]);
                 } else {
+                    console.log('[Auth] signUp 呼び出し...');
                     const { data, error } = await Promise.race([
                         sb.auth.signUp({ email, password }),
-                        timeout
+                        makeTimeout(10000, 'タイムアウト: サーバーからの応答がありませんでした')
                     ]);
                     console.log('[Auth] signUp data:', data, 'error:', error);
                     if (error) throw error;
@@ -3615,7 +3657,10 @@
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
                         return;
                     }
-                    await onAuthSuccess(data.session);
+                    await Promise.race([
+                        onAuthSuccess(data.session),
+                        makeTimeout(15000, 'タイムアウト: 登録後の処理が完了しませんでした')
+                    ]);
                 }
             } catch (e) {
                 console.error('ログインエラー:', e);
