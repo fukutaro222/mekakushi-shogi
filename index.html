@@ -2685,9 +2685,33 @@
         body.board-green #shogi-board td.selected { background-color: rgba(100,190,50,0.52) !important; }
         body.board-green #shogi-board td.movable::after { background: rgba(100,190,50,0.52); }
         body.board-green #shogi-board td.star-cell::before { background: #1a2f0a; }
+
+        /* ── グローバル戻るボタン / CPUホームボタン ── */
+        #global-back-btn, #cpu-home-btn {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 2500;
+            background: rgba(42,21,0,0.88);
+            color: #c8a820;
+            border: 1px solid rgba(200,168,32,0.6);
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-family: inherit;
+            font-size: 14px;
+            cursor: pointer;
+            display: none;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+        #global-back-btn:hover, #cpu-home-btn:hover {
+            background: rgba(200,168,32,0.18);
+        }
     </style>
 </head>
 <body>
+    <button id="global-back-btn">← 戻る</button>
+    <button id="cpu-home-btn">🏠 トップへ戻る</button>
     <!-- タイトル画面 -->
     <div id="title-screen">
         <canvas id="title-canvas"></canvas>
@@ -3309,6 +3333,36 @@
     let currentUser    = null;   // { id, email, nickname }
     let authIsLogin    = true;   // true=ログイン, false=新規登録
 
+    // ── バックボタン管理 ──────────────────────────────────────────────────────
+    let _globalBackCb  = null;
+    let cpuGameActive  = false;
+
+    function showBackBtn(cb) {
+        _globalBackCb = cb;
+        document.getElementById('global-back-btn').style.display = '';
+    }
+    function hideBackBtn() {
+        _globalBackCb = null;
+        document.getElementById('global-back-btn').style.display = 'none';
+    }
+    function showCpuHomeBtn() {
+        document.getElementById('cpu-home-btn').style.display = '';
+    }
+    function hideCpuHomeBtn() {
+        document.getElementById('cpu-home-btn').style.display = 'none';
+    }
+
+    // 選択肢ボタンの汎用ハンドラ（initAuthUI 内でも定義されるが top-level でも必要）
+    function setupChoiceGroup(groupId, onSelect) {
+        document.querySelectorAll(`#${groupId} .setup-choice`).forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll(`#${groupId} .setup-choice`).forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                onSelect(btn.dataset.val);
+            });
+        });
+    }
+
     async function fetchOrCreateProfile(userId) {
         const { data, error } = await sb
             .from('profiles')
@@ -3586,10 +3640,12 @@
         function showSetupPanel() {
             document.getElementById('title-content').classList.add('hidden');
             document.getElementById('setup-panel').classList.remove('hidden');
+            showBackBtn(hideSetupPanel);
         }
         function hideSetupPanel() {
             document.getElementById('setup-panel').classList.add('hidden');
             document.getElementById('title-content').classList.remove('hidden');
+            hideBackBtn();
         }
 
         // 選択肢ボタンの汎用ハンドラ
@@ -3652,6 +3708,8 @@
 
             // モードトグルを表示して初期状態に合わせる
             showModeToggles();
+            cpuGameActive = true;
+            showCpuHomeBtn();
 
             // 後手を選んだ場合、先手（CPU）が先手番なので先に動かす
             if (playerSide === 'gote') {
@@ -3754,9 +3812,11 @@
             cont.appendChild(fbBtn);
 
             modal.classList.remove('hidden');
+            showBackBtn(hideSettingsModal);
         }
         function hideSettingsModal() {
             document.getElementById('settings-modal').classList.add('hidden');
+            hideBackBtn();
         }
         document.getElementById('settings-close-btn').addEventListener('click', hideSettingsModal);
         document.getElementById('settings-modal').addEventListener('click', e => {
@@ -4866,10 +4926,12 @@
     function showMatchmakingPanel() {
         document.getElementById('title-content').classList.add('hidden');
         document.getElementById('mm-panel').classList.remove('hidden');
+        showBackBtn(hideMatchmakingPanel);
     }
     function hideMatchmakingPanel() {
         document.getElementById('mm-panel').classList.add('hidden');
         document.getElementById('title-content').classList.remove('hidden');
+        hideBackBtn();
     }
     function showMatchmakingWaiting() {
         document.getElementById('mm-panel').classList.add('hidden');
@@ -4877,10 +4939,12 @@
         document.getElementById('mm-waiting-text').textContent = '対局相手を探しています...';
         document.getElementById('mm-waiting-timer').textContent = '待機中... 00:00';
         document.getElementById('mm-waiting-msg').style.display = 'none';
+        showBackBtn(() => cancelMatchmaking());
     }
     function hideMatchmakingWaiting() {
         document.getElementById('mm-waiting-panel').classList.add('hidden');
         clearInterval(mmTimerInterval); mmTimerInterval = null;
+        hideBackBtn();
     }
 
     function mmCleanup(destroyPeer) {
@@ -5274,6 +5338,7 @@
         document.getElementById('title-content').classList.remove('hidden');
         brdCloseAllModals();
         brdUnsubscribeDetail();
+        hideBackBtn();
     }
 
     function brdCloseAllModals() {
@@ -5299,6 +5364,7 @@
         brdUnsubscribeDetail();
         brdLoadList();
         if (!brdListChannel) brdSubscribeList();
+        showBackBtn(hideBoardPanel);
     }
 
     function brdSubscribeList() {
@@ -5389,6 +5455,7 @@
     function brdGoNew() {
         if (!currentUser) { showToast('ログインが必要です'); return; }
         brdSwitchView('new');
+        showBackBtn(brdGoList);
         document.getElementById('brd-title-input').value = '';
         document.getElementById('brd-content-input').value = '';
         document.getElementById('brd-title-count').textContent = '0 / 30';
@@ -5419,6 +5486,7 @@
 
     async function brdGoDetail(threadId) {
         brdSwitchView('detail');
+        showBackBtn(brdGoList);
         brdUnsubscribeDetail();
         brdThreadId = threadId;
         document.getElementById('brd-replies-list').innerHTML = '<div class="brd-empty">読み込み中...</div>';
@@ -7004,6 +7072,9 @@
         if (mmMode) { mmCleanup(true); if (mmQueueId) { sb.from('matchmaking_queue').update({ status: 'cancelled' }).eq('id', mmQueueId).catch(()=>{}); mmQueueId = null; } }
         blindMode = false; namedlessMode = false;
         hideModeToggles();
+        hideBackBtn();
+        hideCpuHomeBtn();
+        cpuGameActive = false;
         // 感想戦中ならバーを隠す
         if (analyzeMode) {
             analyzeMode = false; analyzeVariation = []; analyzeKifu = []; analyzeStep = 0;
@@ -7110,9 +7181,11 @@
     function showRanking() {
         document.getElementById('ranking-modal').classList.add('visible');
         loadRanking();
+        showBackBtn(hideRanking);
     }
     function hideRanking() {
         document.getElementById('ranking-modal').classList.remove('visible');
+        hideBackBtn();
     }
 
     async function loadRanking() {
@@ -7183,9 +7256,11 @@
     function showKifuHistory() {
         document.getElementById('kifu-history-modal').classList.add('visible');
         loadKifuList();
+        showBackBtn(hideKifuHistory);
     }
     function hideKifuHistory() {
         document.getElementById('kifu-history-modal').classList.remove('visible');
+        hideBackBtn();
     }
 
     // ── 棋譜再生 ─────────────────────────────────────────────────────────────
@@ -7208,6 +7283,8 @@
             alert('この棋譜は再生に対応していません');
             return;
         }
+        hideCpuHomeBtn();
+        showBackBtn(stopReplay);
         stopClock();
         pvpMode = false;
         replayMode     = true;
@@ -7289,6 +7366,7 @@
     }
 
     function stopReplay() {
+        hideBackBtn();
         replayMode     = false;
         textReplayMode = false;
         replayKifu = [];
@@ -7305,6 +7383,8 @@
     // ── 感想戦 ───────────────────────────────────────────────────────────────
 
     function startAnalysis() {
+        hideCpuHomeBtn();
+        showBackBtn(() => { stopAnalysis(); if (cpuGameActive) showCpuHomeBtn(); });
         analyzeKifu = [...kifu];       // 対局棋譜を保存
         analyzeStep  = analyzeKifu.length; // 終局局面から開始
         analyzeVariation = [];
@@ -7381,6 +7461,7 @@
     }
 
     function stopAnalysis() {
+        hideBackBtn();
         // 終局局面を再構築してからクリア
         const savedKifu = [...analyzeKifu];
         analyzeMode      = false;
@@ -7591,11 +7672,13 @@
         document.getElementById('title-content').classList.add('hidden');
         document.getElementById('research-panel').classList.remove('hidden');
         renderResearchSavedList();
+        showBackBtn(hideResearchPanel);
     }
 
     function hideResearchPanel() {
         document.getElementById('research-panel').classList.add('hidden');
         document.getElementById('title-content').classList.remove('hidden');
+        hideBackBtn();
     }
 
     function drawRatingGraph(chronoData) {
@@ -8904,6 +8987,18 @@
         };
         reader.readAsText(file, 'UTF-8');
         e.target.value = '';
+    });
+
+    // ── グローバル戻るボタン ────────────────────────────────────────────────────
+    document.getElementById('global-back-btn').addEventListener('click', () => {
+        if (_globalBackCb) _globalBackCb();
+    });
+    document.getElementById('cpu-home-btn').addEventListener('click', () => {
+        if (confirm('対局を終了してトップに戻りますか？')) {
+            cpuGameActive = false;
+            hideCpuHomeBtn();
+            showTitleScreen();
+        }
     });
 
     // Supabase 認証 UI 初期化
