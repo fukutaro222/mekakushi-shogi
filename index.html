@@ -3712,6 +3712,7 @@
                 setTimeout(() => reject(new Error(msg)), ms)
             );
 
+            let authSucceeded = false;
             try {
                 if (authIsLogin) {
                     console.log('[Auth] signInWithPassword 呼び出し...');
@@ -3721,9 +3722,10 @@
                     ]);
                     console.log('[Auth] signIn data:', data, 'error:', error);
                     if (error) throw error;
+                    if (!data?.session) throw new Error('セッションの取得に失敗しました。もう一度お試しください。');
                     console.log('[Auth] ログイン成功。onAuthSuccess 呼び出し...');
                     await onAuthSuccess(data.session);
-                    hideAuthOverlay(); // onAuthSuccess が失敗しても強制的に閉じる
+                    authSucceeded = true;
                 } else {
                     console.log('[Auth] signUp 呼び出し...');
                     const { data, error } = await Promise.race([
@@ -3738,13 +3740,25 @@
                         return;
                     }
                     await onAuthSuccess(data.session);
-                    hideAuthOverlay(); // 念のため強制閉じ
+                    authSucceeded = true;
                 }
             } catch (e) {
                 console.error('ログインエラー:', e);
                 errEl.textContent = translateAuthError(e.message);
             } finally {
                 btn.disabled = false;
+                if (authSucceeded) {
+                    // 同期・非同期どちらのタイミングでも確実にオーバーレイを閉じる
+                    hideAuthOverlay();
+                    setTimeout(() => {
+                        hideAuthOverlay();
+                        // タイトル画面が fade-out/hidden になっていたら戻す
+                        const ts = document.getElementById('title-screen');
+                        if (ts && (ts.classList.contains('hidden') || ts.classList.contains('fade-out'))) {
+                            ts.classList.remove('hidden', 'fade-out');
+                        }
+                    }, 150);
+                }
             }
         };
         document.getElementById('auth-submit').addEventListener('click', submitAuth);
