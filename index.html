@@ -2495,40 +2495,79 @@
             box-shadow: 0 0 18px rgba(200, 168, 32, 0.2);
         }
         #title-auth { display: none; }
-        /* 右上ログインリンク */
-        #title-auth-corner {
-            position: absolute;
-            top: 16px;
-            right: 18px;
-            z-index: 10;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        /* 旧タイトル内コーナー（グローバルコーナーに移行したため非表示） */
+        #title-auth-corner { display: none !important; }
+
+        /* ── グローバル認証コーナー（全画面固定表示） ── */
+        #global-auth-corner {
+            position: fixed;
+            top: 12px;
+            right: 16px;
+            z-index: 2050;
             font-size: 13px;
             font-family: 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+            user-select: none;
         }
-        .title-auth-link {
-            color: rgba(200, 168, 80, 0.75);
+        .gac-links {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .gac-link {
+            color: rgba(200, 168, 80, 0.85);
             background: none;
             border: none;
             cursor: pointer;
             font-size: 13px;
             font-family: inherit;
             padding: 4px 2px;
-            text-decoration: none;
             letter-spacing: 1px;
             transition: color 0.2s;
         }
-        .title-auth-link:hover { color: #c8a820; }
-        .title-auth-sep {
+        .gac-link:hover { color: #c8a820; }
+        .gac-sep {
             color: rgba(200, 168, 80, 0.35);
             font-size: 12px;
-            user-select: none;
         }
-        .title-auth-user {
-            color: rgba(200, 168, 80, 0.75);
-            font-size: 13px;
+        .gac-user {
+            color: rgba(200, 168, 80, 0.9);
+            cursor: pointer;
             letter-spacing: 1px;
+            padding: 4px 2px;
+            transition: color 0.2s;
+            white-space: nowrap;
+        }
+        .gac-user:hover { color: #e8c840; }
+        .gac-dropdown {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            background: rgba(20, 10, 0, 0.97);
+            border: 1px solid rgba(200, 168, 80, 0.45);
+            border-radius: 7px;
+            padding: 4px 0;
+            min-width: 130px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+            z-index: 2051;
+        }
+        .gac-dropdown.hidden { display: none; }
+        .gac-dropdown button {
+            display: block;
+            width: 100%;
+            padding: 9px 18px;
+            background: none;
+            border: none;
+            color: rgba(200, 168, 80, 0.85);
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            text-align: left;
+            letter-spacing: 1px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .gac-dropdown button:hover {
+            background: rgba(200, 168, 80, 0.12);
+            color: #e8c840;
         }
 
         /* ── タイトルコンテンツ hidden ── */
@@ -7290,30 +7329,57 @@
     }
 
     function updateTitleAuth() {
-        const el = document.getElementById('title-auth-corner');
+        const el = document.getElementById('global-auth-corner');
         if (!el) return;
+
         if (currentUser) {
             const nick   = currentUser.nickname ?? currentUser.email;
             const rank   = currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200);
             const rating = currentUser.rating ?? 1200;
-            el.innerHTML = `<span class="title-auth-user">👤 ${nick}　${rank}　(${rating})</span>`;
+            el.innerHTML =
+                `<span class="gac-user" id="gac-user-btn">👤 ${nick}　${rank}　(${rating})</span>` +
+                `<div class="gac-dropdown hidden" id="gac-dropdown">` +
+                    `<button id="gac-nickname-btn">ニックネーム変更</button>` +
+                    `<button id="gac-logout-btn">ログアウト</button>` +
+                `</div>`;
+
+            document.getElementById('gac-user-btn').addEventListener('click', e => {
+                e.stopPropagation();
+                document.getElementById('gac-dropdown').classList.toggle('hidden');
+            });
+            document.getElementById('gac-nickname-btn').addEventListener('click', e => {
+                e.stopPropagation();
+                document.getElementById('gac-dropdown').classList.add('hidden');
+                showNicknameModal(false);
+            });
+            document.getElementById('gac-logout-btn').addEventListener('click', async e => {
+                e.stopPropagation();
+                if (sb) await sb.auth.signOut();
+                location.reload();
+            });
         } else {
             el.innerHTML =
-                `<button class="title-auth-link" id="ta-register">新規登録</button>` +
-                `<span class="title-auth-sep">|</span>` +
-                `<button class="title-auth-link" id="ta-login">ログイン</button>`;
-            document.getElementById('ta-login').addEventListener('click', () => {
-                hideBackBtn();
+                `<div class="gac-links">` +
+                    `<button class="gac-link" id="gac-register">新規登録</button>` +
+                    `<span class="gac-sep">|</span>` +
+                    `<button class="gac-link" id="gac-login">ログイン</button>` +
+                `</div>`;
+            document.getElementById('gac-login').addEventListener('click', () => {
                 document.getElementById('tab-login')?.click();
                 showAuthOverlay();
             });
-            document.getElementById('ta-register').addEventListener('click', () => {
-                hideBackBtn();
+            document.getElementById('gac-register').addEventListener('click', () => {
                 document.getElementById('tab-register')?.click();
                 showAuthOverlay();
             });
         }
     }
+
+    // ドロップダウンをクリック外で閉じる
+    document.addEventListener('click', () => {
+        const dd = document.getElementById('gac-dropdown');
+        if (dd) dd.classList.add('hidden');
+    });
 
     // ── パーティクル ──────────────────────────────────────────────────────────
 
@@ -9198,5 +9264,8 @@
     // Supabase 認証 UI 初期化（getSession/onAuthStateChangeは先頭で登録済み）
     initAuthUI();
     </script>
+
+    <!-- グローバル認証コーナー：全画面で右上に固定表示 -->
+    <div id="global-auth-corner"></div>
 </body>
 </html>
