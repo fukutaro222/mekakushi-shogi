@@ -3678,12 +3678,13 @@
             document.getElementById('auth-error').textContent = '';
         });
 
-        // フォーム送信
-        const submitAuth = async () => {
+        // フォーム送信 — onclick で既存リスナーをすべて上書き
+        document.getElementById('auth-submit').onclick = async function() {
             const email    = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
             const errEl    = document.getElementById('auth-error');
-            const btn      = document.getElementById('auth-submit');
+            const btn      = this;
+
             errEl.style.color = '#c0392b';
             errEl.textContent = '';
 
@@ -3703,9 +3704,7 @@
                 if (authIsLogin) {
                     const { data, error } = await sb.auth.signInWithPassword({ email, password });
                     if (error) throw error;
-                    // ログイン成功 → ページをリロードして確実にセッション反映
                     location.reload();
-                    return;
                 } else {
                     const { data, error } = await sb.auth.signUp({ email, password });
                     if (error) throw error;
@@ -3714,32 +3713,22 @@
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
                         return;
                     }
-                    // 新規登録でセッションあり → リロード
                     location.reload();
-                    return;
                 }
-            } catch (e) {
+            } catch(e) {
                 console.error('[Auth] エラー:', e);
                 errEl.textContent = translateAuthError(e.message);
             } finally {
                 btn.disabled = false;
                 btn.textContent = authIsLogin ? 'ログイン' : '新規登録';
-                // リロードしない場合（エラー時）のフォールバック
-                if (currentUser) {
-                    hideAuthOverlay();
-                    const ts = document.getElementById('title-screen');
-                    if (ts && (ts.classList.contains('hidden') || ts.classList.contains('fade-out'))) {
-                        ts.classList.remove('hidden', 'fade-out');
-                    }
-                }
             }
         };
-        document.getElementById('auth-submit').addEventListener('click', submitAuth);
-        ['auth-email','auth-password'].forEach(id =>
-            document.getElementById(id).addEventListener('keydown', e => {
-                if (e.key === 'Enter') submitAuth();
-            })
-        );
+
+        // Enterキーでも送信
+        document.getElementById('auth-email').onkeydown    =
+        document.getElementById('auth-password').onkeydown = function(e) {
+            if (e.key === 'Enter') document.getElementById('auth-submit').click();
+        };
 
         // ── パスワードリセット ────────────────────────────────────────────
         const showAuthView = (view) => {
