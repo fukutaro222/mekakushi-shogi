@@ -3464,23 +3464,27 @@
     function translateAuthError(msg) {
         if (!msg) return '不明なエラーが発生しました';
         const m = msg.toLowerCase();
-        if (m.includes('invalid login credentials'))
-            return 'メールアドレスまたはパスワードが正しくありません';
-        if (m.includes('email not confirmed'))
+        if (m.includes('invalid login credentials') || m.includes('invalid credentials') || m.includes('wrong password') || m.includes('invalid password'))
+            return 'メールアドレスまたはパスワードが間違っています';
+        if (m.includes('email not confirmed') || m.includes('email not verified'))
             return 'メールアドレスの確認が完了していません。届いたメールのリンクをクリックしてください';
-        if (m.includes('user already registered') || m.includes('already registered'))
+        if (m.includes('user already registered') || m.includes('already registered') || m.includes('user already exists'))
             return 'このメールアドレスはすでに登録されています';
-        if (m.includes('password should be at least') || m.includes('password must be'))
+        if (m.includes('password should be at least') || m.includes('password must be') || m.includes('weak password'))
             return 'パスワードは6文字以上で入力してください';
-        if (m.includes('email rate limit exceeded') || m.includes('rate limit'))
+        if (m.includes('email rate limit exceeded') || m.includes('rate limit') || m.includes('over_email_send_rate_limit'))
             return 'メール送信数の上限に達しました。しばらく時間をおいてからお試しください';
-        if (m.includes('invalid api key') || m.includes('invalid key'))
-            return '認証エラーが発生しました。しばらく時間をおいてからお試しください';
-        if (m.includes('signup is disabled'))
+        if (m.includes('invalid api key') || m.includes('invalid key') || m.includes('apikey') || m.includes('unauthorized'))
+            return '認証設定にエラーがあります。管理者にお問い合わせください';
+        if (m.includes('signup is disabled') || m.includes('email signups are disabled') || m.includes('signups not allowed'))
             return '現在新規登録を受け付けていません';
-        if (m.includes('network request failed') || m.includes('fetch') || m.includes('failed to fetch'))
-            return '通信エラーが発生しました。インターネット接続を確認してください';
-        return msg; // 上記に該当しない場合はそのまま表示
+        if (m.includes('user not found') || m.includes('no user found'))
+            return 'このメールアドレスは登録されていません';
+        if (m.includes('too many requests') || m.includes('request timeout'))
+            return 'リクエストが多すぎます。しばらく時間をおいてから再試行してください';
+        if (m.includes('network') || m.includes('fetch') || m.includes('failed to fetch') || m.includes('connection'))
+            return '通信エラーが発生しました。再度お試しください';
+        return msg;
     }
 
     function initAuthUI() {
@@ -3518,23 +3522,48 @@
             const errEl    = document.getElementById('auth-error');
             const btn      = document.getElementById('auth-submit');
             errEl.style.color = '#c0392b';
-            if (!email || !password) { errEl.textContent = 'メールアドレスとパスワードを入力してください'; return; }
-            btn.disabled = true;
             errEl.textContent = '';
-            const res = authIsLogin
-                ? await sb.auth.signInWithPassword({ email, password })
-                : await sb.auth.signUp({ email, password });
-            btn.disabled = false;
-            if (res.error) {
-                errEl.textContent = translateAuthError(res.error.message);
+
+            // クライアント側バリデーション
+            if (!email || !password) {
+                errEl.textContent = 'メールアドレスとパスワードを入力してください';
                 return;
             }
-            if (!authIsLogin && !res.data.session) {
-                errEl.style.color = '#2a7a2a';
-                errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                errEl.textContent = '正しいメールアドレスを入力してください';
                 return;
             }
-            await onAuthSuccess(res.data.session);
+            if (!authIsLogin && password.length < 6) {
+                errEl.textContent = 'パスワードは6文字以上で入力してください';
+                return;
+            }
+
+            btn.disabled = true;
+            console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
+
+            try {
+                const res = authIsLogin
+                    ? await sb.auth.signInWithPassword({ email, password })
+                    : await sb.auth.signUp({ email, password });
+                btn.disabled = false;
+
+                if (res.error) {
+                    console.error('[Auth] エラー:', res.error);
+                    errEl.textContent = translateAuthError(res.error.message);
+                    return;
+                }
+                console.log('[Auth] 成功');
+                if (!authIsLogin && !res.data.session) {
+                    errEl.style.color = '#2a7a2a';
+                    errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
+                    return;
+                }
+                await onAuthSuccess(res.data.session);
+            } catch (e) {
+                btn.disabled = false;
+                console.error('[Auth] 例外:', e);
+                errEl.textContent = '通信エラーが発生しました。再度お試しください';
+            }
         };
         document.getElementById('auth-submit').addEventListener('click', submitAuth);
         ['auth-email','auth-password'].forEach(id =>
@@ -3773,25 +3802,6 @@
                     document.getElementById('logout-btn').click();
                 });
                 cont.appendChild(logoutBtn);
-            } else {
-                const loginBtn = document.createElement('button');
-                loginBtn.className = 'settings-item-btn';
-                loginBtn.textContent = 'ログイン';
-                loginBtn.addEventListener('click', () => {
-                    hideSettingsModal();
-                    document.getElementById('tab-login')?.click();
-                    document.getElementById('auth-overlay').classList.add('visible');
-                });
-                cont.appendChild(loginBtn);
-                const regBtn = document.createElement('button');
-                regBtn.className = 'settings-item-btn';
-                regBtn.textContent = '新規登録';
-                regBtn.addEventListener('click', () => {
-                    hideSettingsModal();
-                    document.getElementById('tab-register')?.click();
-                    document.getElementById('auth-overlay').classList.add('visible');
-                });
-                cont.appendChild(regBtn);
             }
             // ── ゲーム設定セクション ──────────────────────────────────────
             function addRow(label, items, current, onChange) {
