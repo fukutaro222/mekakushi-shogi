@@ -3482,8 +3482,16 @@
     function showAuthOverlay() {
         const el = document.getElementById('auth-overlay');
         if (!el) return;
-        el.style.display = '';          // inline style をクリアして CSS クラスに委譲
+        el.style.display = '';
         el.classList.add('visible');
+        // オーバーレイを開く時点でボタンを必ず有効化（MutationObserver 非依存）
+        const btn = document.getElementById('auth-submit');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = (typeof authIsLogin !== 'undefined' && !authIsLogin) ? '新規登録' : 'ログイン';
+        }
+        const errEl = document.getElementById('auth-error');
+        if (errEl) errEl.textContent = '';
     }
     function hideAuthOverlay() {
         const el = document.getElementById('auth-overlay');
@@ -3678,14 +3686,8 @@
             showAuthOverlay();
         }
 
-        // オーバーレイが開くたびに送信ボタンのdisabledをリセット
-        new MutationObserver(() => {
-            const overlay = document.getElementById('auth-overlay');
-            if (overlay.classList.contains('visible')) {
-                document.getElementById('auth-submit').disabled = false;
-                document.getElementById('auth-error').textContent = '';
-            }
-        }).observe(document.getElementById('auth-overlay'), { attributeFilter: ['class'] });
+        // 初期化時点でボタンを確実に有効化
+        document.getElementById('auth-submit').disabled = false;
 
         // ページロード直後にボタンを表示（getSession() の完了を待たない）
         updateTitleAuth();
@@ -3743,7 +3745,11 @@
                 if (authIsLogin) {
                     const { data, error } = await sb.auth.signInWithPassword({ email, password });
                     if (error) throw error;
-                    location.reload();
+                    // 成功 → リロードで確実に反映。リロードが遅延する場合は直接遷移も試みる
+                    window.location.reload(true);
+                    // リロードが発火するまでの間ボタンを有効に戻す
+                    setTimeout(() => { btn.disabled = false; btn.textContent = 'ログイン'; }, 500);
+                    return;
                 } else {
                     const { data, error } = await sb.auth.signUp({ email, password });
                     if (error) throw error;
@@ -3752,7 +3758,9 @@
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
                         return;
                     }
-                    location.reload();
+                    window.location.reload(true);
+                    setTimeout(() => { btn.disabled = false; btn.textContent = '新規登録'; }, 500);
+                    return;
                 }
             } catch(e) {
                 console.error('[Auth] エラー:', e);
