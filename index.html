@@ -3434,39 +3434,41 @@
         console.log('[Auth] onAuthSuccess 開始:', session?.user?.email);
         const user = session.user;
 
-        // プロファイル取得（8秒タイムアウト付き・失敗してもデフォルト値で続行）
-        console.log('[Auth] プロファイル取得中...');
-        let profile = PROFILE_DEFAULT;
-        try {
-            profile = await Promise.race([
-                fetchOrCreateProfile(user.id),
-                new Promise((_, rej) => setTimeout(() => rej(new Error('profile timeout')), 8000))
-            ]);
-        } catch (e) {
-            console.warn('[Auth] プロファイル取得失敗 (デフォルト値使用):', e.message);
-        }
-        console.log('[Auth] プロファイル:', profile);
-
+        // ① デフォルト値でcurrentUserを即設定
         currentUser = {
             id: user.id, email: user.email,
-            nickname: profile.nickname,
-            rating: profile.rating ?? 1200,
-            rank: profile.rank ?? ratingToRank(profile.rating ?? 1200),
-            rank_achievement: profile.rank_achievement ?? 0,
+            nickname: null,
+            rating: 1200,
+            rank: '3級',
+            rank_achievement: 0,
         };
-        console.log('[Auth] currentUser 設定完了');
 
+        // ② profilesを待たず即座に画面遷移
         document.getElementById('auth-overlay').classList.remove('visible');
         document.getElementById('user-bar').classList.add('visible');
         updateUserBar();
         updateTitleAuth();
-        console.log('[Auth] UI更新完了');
+        console.log('[Auth] 画面遷移完了（profile取得はバックグラウンドで継続）');
 
-        if (!currentUser.nickname) {
-            console.log('[Auth] ニックネームモーダル表示');
+        // ③ profilesをバックグラウンドで取得してUIを更新（遷移はブロックしない）
+        if (sb) {
+            fetchOrCreateProfile(user.id).then(profile => {
+                console.log('[Auth] バックグラウンドプロファイル取得成功:', profile);
+                currentUser.nickname       = profile.nickname;
+                currentUser.rating         = profile.rating        ?? 1200;
+                currentUser.rank           = profile.rank          ?? ratingToRank(profile.rating ?? 1200);
+                currentUser.rank_achievement = profile.rank_achievement ?? 0;
+                updateUserBar();
+                updateTitleAuth();
+                if (!currentUser.nickname) showNicknameModal(true);
+            }).catch(e => {
+                console.warn('[Auth] バックグラウンドプロファイル取得失敗:', e.message);
+                showNicknameModal(true);
+            });
+        } else {
             showNicknameModal(true);
         }
-        console.log('[Auth] onAuthSuccess 完了');
+        // onAuthSuccessはここで即return（profileフェッチを待たない）
     }
 
     function updateUserBar() {
@@ -3640,10 +3642,8 @@
                     console.log('[Auth] signIn data:', data, 'error:', error);
                     if (error) throw error;
                     console.log('[Auth] ログイン成功。onAuthSuccess 呼び出し...');
-                    await Promise.race([
-                        onAuthSuccess(data.session),
-                        makeTimeout(15000, 'タイムアウト: ログイン後の処理が完了しませんでした')
-                    ]);
+                    // onAuthSuccessは画面遷移後すぐreturnするので待つだけでよい
+                    await onAuthSuccess(data.session);
                 } else {
                     console.log('[Auth] signUp 呼び出し...');
                     const { data, error } = await Promise.race([
@@ -3657,10 +3657,7 @@
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
                         return;
                     }
-                    await Promise.race([
-                        onAuthSuccess(data.session),
-                        makeTimeout(15000, 'タイムアウト: 登録後の処理が完了しませんでした')
-                    ]);
+                    await onAuthSuccess(data.session);
                 }
             } catch (e) {
                 console.error('ログインエラー:', e);
@@ -4638,10 +4635,15 @@
     let wasmReady  = false;
     let bestMoveResolve = null;
 
-    function sendAndWait(engine, cmd, waitFor) {
-        return new Promise(resolve => {
+    function sendAndWait(engine, cmd, waitFor, ms = 15000) {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                engine.removeMessageListener(listener);
+                reject(new Error(`WASM timeout waiting for "${waitFor}" (cmd: ${cmd})`));
+            }, ms);
             const listener = line => {
                 if (line.startsWith(waitFor)) {
+                    clearTimeout(timer);
                     engine.removeMessageListener(listener);
                     resolve();
                 }
@@ -9183,16 +9185,26 @@
     if (window.crossOriginIsolated) {
         (async () => {
             try {
-                await new Promise((resolve, reject) => {
-                    const s = document.createElement('script');
-                    s.src = '/engine/yaneuraou.js';
-                    s.onload = resolve;
-                    s.onerror = () => reject(new Error('script load failed'));
-                    document.head.appendChild(s);
-                });
-                await initWasmEngine();
+                // スクリプトロード（10秒タイムアウト）
+                await Promise.race([
+                    new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = '/engine/yaneuraou.js';
+                        s.onload = resolve;
+                        s.onerror = () => reject(new Error('script load failed'));
+                        document.head.appendChild(s);
+                    }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('script load timeout')), 10000))
+                ]);
+                // エンジン初期化（30秒タイムアウト）
+                await Promise.race([
+                    initWasmEngine(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('engine init timeout')), 30000))
+                ]);
             } catch (e) {
                 console.warn('[WASM] ロード失敗 → JSエンジンで継続:', e.message ?? e);
+                const statusEl = document.getElementById('engine-status');
+                if (statusEl && statusEl.textContent !== 'WASM') statusEl.textContent = 'JS';
             }
         })();
     }
