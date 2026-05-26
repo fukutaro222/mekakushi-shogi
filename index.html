@@ -3385,7 +3385,7 @@
                 document.getElementById('newpass-submit-btn').disabled = false;
                 ['main','reset'].forEach(v => { document.getElementById(`auth-view-${v}`).style.display = 'none'; });
                 document.getElementById('auth-view-newpass').style.display = 'flex';
-                document.getElementById('auth-overlay').classList.add('visible');
+                showAuthOverlay();
             } else if (event === 'SIGNED_IN' && session && !currentUser) {
                 await onAuthSuccess(session);
             } else if (event === 'SIGNED_OUT') {
@@ -3409,9 +3409,11 @@
     }
 
     // WASMエンジン起動（認証完了後に呼ばれる）
+    let _wasmStarted = false;
     function _startWasmEngine() {
-        if (!window.crossOriginIsolated) return;
-        console.log('[WASM] エンジンロード開始（認証完了後）');
+        if (_wasmStarted || !window.crossOriginIsolated) return;
+        _wasmStarted = true;
+        console.log('[WASM] エンジンロード開始（練習対局ボタン押下）');
         (async () => {
             try {
                 await Promise.race([
@@ -3434,6 +3436,21 @@
                 if (statusEl && statusEl.textContent !== 'WASM') statusEl.textContent = 'JS';
             }
         })();
+    }
+
+    // ── 認証オーバーレイ 表示/非表示ヘルパー ─────────────────────────────────
+    // classList だけでは inline style に負けるため、style.display も合わせて操作する
+    function showAuthOverlay() {
+        const el = document.getElementById('auth-overlay');
+        if (!el) return;
+        el.style.display = '';          // inline style をクリアして CSS クラスに委譲
+        el.classList.add('visible');
+    }
+    function hideAuthOverlay() {
+        const el = document.getElementById('auth-overlay');
+        if (!el) return;
+        el.classList.remove('visible');
+        el.style.display = 'none';      // CSS クラスが効かない場合の保険
     }
 
     // ── バックボタン管理 ──────────────────────────────────────────────────────
@@ -3507,7 +3524,7 @@
         };
 
         // ② profilesを待たず即座に画面遷移
-        document.getElementById('auth-overlay').classList.remove('visible');
+        hideAuthOverlay();
         document.getElementById('user-bar').classList.add('visible');
         updateUserBar();
         updateTitleAuth();
@@ -3619,7 +3636,7 @@
             document.getElementById('newpass-confirm').value = '';
             document.getElementById('newpass-msg').textContent = '';
             document.getElementById('newpass-submit-btn').disabled = false;
-            document.getElementById('auth-overlay').classList.add('visible');
+            showAuthOverlay();
         }
 
         // オーバーレイが開くたびに送信ボタンのdisabledをリセット
@@ -3638,7 +3655,7 @@
         document.getElementById('auth-back-btn').addEventListener('click', () => {
             if (authIsLogin) {
                 // ログイン画面: オーバーレイを閉じてタイトルへ
-                document.getElementById('auth-overlay').classList.remove('visible');
+                hideAuthOverlay();
             } else {
                 // 新規登録画面: ログインタブへ戻る
                 document.getElementById('tab-login').click();
@@ -3705,8 +3722,8 @@
                     console.log('[Auth] signIn data:', data, 'error:', error);
                     if (error) throw error;
                     console.log('[Auth] ログイン成功。onAuthSuccess 呼び出し...');
-                    // onAuthSuccessは画面遷移後すぐreturnするので待つだけでよい
                     await onAuthSuccess(data.session);
+                    hideAuthOverlay(); // onAuthSuccess が失敗しても強制的に閉じる
                 } else {
                     console.log('[Auth] signUp 呼び出し...');
                     const { data, error } = await Promise.race([
@@ -3721,6 +3738,7 @@
                         return;
                     }
                     await onAuthSuccess(data.session);
+                    hideAuthOverlay(); // 念のため強制閉じ
                 }
             } catch (e) {
                 console.error('ログインエラー:', e);
@@ -3841,7 +3859,7 @@
             else {
                 hideBackBtn();
                 document.getElementById('tab-login')?.click();
-                document.getElementById('auth-overlay').classList.add('visible');
+                showAuthOverlay();
             }
         });
         document.getElementById('title-ranking-btn').addEventListener('click', showRanking);
@@ -3850,7 +3868,7 @@
                 showToast('自動マッチングにはログインが必要です');
                 hideBackBtn();
                 document.getElementById('tab-login')?.click();
-                document.getElementById('auth-overlay')?.classList.add('visible');
+                showAuthOverlay();
                 return;
             }
             showMatchmakingPanel();
@@ -5156,7 +5174,7 @@
             hideMatchmakingPanel();
             hideBackBtn();
             document.getElementById('tab-login')?.click();
-            document.getElementById('auth-overlay')?.classList.add('visible');
+            showAuthOverlay();
             return;
         }
         showMatchmakingWaiting();
@@ -7311,12 +7329,12 @@
             document.getElementById('ta-login').addEventListener('click', () => {
                 hideBackBtn();
                 document.getElementById('tab-login')?.click();
-                document.getElementById('auth-overlay').classList.add('visible');
+                showAuthOverlay();
             });
             document.getElementById('ta-register').addEventListener('click', () => {
                 hideBackBtn();
                 document.getElementById('tab-register')?.click();
-                document.getElementById('auth-overlay').classList.add('visible');
+                showAuthOverlay();
             });
         }
     }
