@@ -3373,6 +3373,72 @@
     let currentUser    = null;   // { id, email, nickname }
     let authIsLogin    = true;   // true=ログイン, false=新規登録
 
+    // ── 認証リスナーを最優先で登録（WASMロードより先に実行） ──────────────────
+    // ※ コールバック内で使う関数はすべてfunction宣言なので巻き上げで参照可能
+    if (sb) {
+        // onAuthStateChange: ログイン・ログアウト・パスワードリセットを検知
+        sb.auth.onAuthStateChange(async (event, session) => {
+            console.log('[Auth] onAuthStateChange:', event);
+            if (event === 'PASSWORD_RECOVERY') {
+                document.getElementById('newpass-input').value = '';
+                document.getElementById('newpass-confirm').value = '';
+                document.getElementById('newpass-msg').textContent = '';
+                document.getElementById('newpass-submit-btn').disabled = false;
+                ['main','reset'].forEach(v => { document.getElementById(`auth-view-${v}`).style.display = 'none'; });
+                document.getElementById('auth-view-newpass').style.display = 'flex';
+                document.getElementById('auth-overlay').classList.add('visible');
+            } else if (event === 'SIGNED_IN' && session && !currentUser) {
+                await onAuthSuccess(session);
+            } else if (event === 'SIGNED_OUT') {
+                currentUser = null;
+            }
+        });
+
+        // getSession: 既存セッションを確認し、完了後にWASMロードを開始
+        sb.auth.getSession().then(async ({ data: { session } }) => {
+            console.log('[Auth] getSession 完了. session:', !!session);
+            if (session) await onAuthSuccess(session);
+            updateTitleAuth();
+        }).catch(err => {
+            console.error('[Auth] getSession エラー:', err);
+            updateTitleAuth();
+        }).finally(() => {
+            // 認証確認が終わってからWASMをロード（認証コールバックをブロックしない）
+            _startWasmEngine();
+        });
+    } else {
+        // Supabase初期化失敗時もWASMは起動
+        setTimeout(_startWasmEngine, 100);
+    }
+
+    // WASMエンジン起動（認証完了後に呼ばれる）
+    function _startWasmEngine() {
+        if (!window.crossOriginIsolated) return;
+        console.log('[WASM] エンジンロード開始（認証完了後）');
+        (async () => {
+            try {
+                await Promise.race([
+                    new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = '/engine/yaneuraou.js';
+                        s.onload = resolve;
+                        s.onerror = () => reject(new Error('script load failed'));
+                        document.head.appendChild(s);
+                    }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('script load timeout')), 10000))
+                ]);
+                await Promise.race([
+                    initWasmEngine(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('engine init timeout')), 30000))
+                ]);
+            } catch (e) {
+                console.warn('[WASM] ロード失敗 → JSエンジンで継続:', e.message ?? e);
+                const statusEl = document.getElementById('engine-status');
+                if (statusEl && statusEl.textContent !== 'WASM') statusEl.textContent = 'JS';
+            }
+        })();
+    }
+
     // ── バックボタン管理 ──────────────────────────────────────────────────────
     let _globalBackCb  = null;
     let cpuGameActive  = false;
@@ -4107,35 +4173,7 @@
             if (e.key === 'Escape') hideNicknameModal();
         });
 
-        // 既存セッション確認（ページロード時）
-        if (sb) {
-            sb.auth.getSession().then(async ({ data: { session } }) => {
-                if (session) await onAuthSuccess(session);
-                updateTitleAuth();
-            }).catch(err => {
-                console.error('[Auth] セッション確認エラー:', err);
-                updateTitleAuth();
-            });
-        } else {
-            updateTitleAuth();
-        }
-
-        if (sb) sb.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'PASSWORD_RECOVERY') {
-                // リセットメールのリンクから戻った場合：パスワード再設定画面を表示
-                document.getElementById('newpass-input').value = '';
-                document.getElementById('newpass-confirm').value = '';
-                document.getElementById('newpass-msg').textContent = '';
-                document.getElementById('newpass-submit-btn').disabled = false;
-                ['main','reset'].forEach(v => { document.getElementById(`auth-view-${v}`).style.display = 'none'; });
-                document.getElementById('auth-view-newpass').style.display = 'flex';
-                document.getElementById('auth-overlay').classList.add('visible');
-            } else if (event === 'SIGNED_IN' && session && !currentUser) {
-                await onAuthSuccess(session);
-            } else if (event === 'SIGNED_OUT') {
-                currentUser = null;
-            }
-        });
+        // ※ getSession / onAuthStateChange はスクリプト先頭で登録済み（WASM分離のため）
     }
 
     // ── 定数 ──────────────────────────────────────────────────────────────────
@@ -9178,36 +9216,9 @@
         }
     });
 
-    // Supabase 認証 UI 初期化
+    // Supabase 認証 UI 初期化（getSession/onAuthStateChangeは先頭で登録済み）
     initAuthUI();
-
-    // やねうら王 WASM エンジンを非同期ロード（COEP/COOP 環境のみ）
-    if (window.crossOriginIsolated) {
-        (async () => {
-            try {
-                // スクリプトロード（10秒タイムアウト）
-                await Promise.race([
-                    new Promise((resolve, reject) => {
-                        const s = document.createElement('script');
-                        s.src = '/engine/yaneuraou.js';
-                        s.onload = resolve;
-                        s.onerror = () => reject(new Error('script load failed'));
-                        document.head.appendChild(s);
-                    }),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('script load timeout')), 10000))
-                ]);
-                // エンジン初期化（30秒タイムアウト）
-                await Promise.race([
-                    initWasmEngine(),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('engine init timeout')), 30000))
-                ]);
-            } catch (e) {
-                console.warn('[WASM] ロード失敗 → JSエンジンで継続:', e.message ?? e);
-                const statusEl = document.getElementById('engine-status');
-                if (statusEl && statusEl.textContent !== 'WASM') statusEl.textContent = 'JS';
-            }
-        })();
-    }
+    // ※ WASMロードはgetSession完了後に_startWasmEngine()が自動的に呼び出す
     </script>
 </body>
 </html>
