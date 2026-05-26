@@ -3500,6 +3500,10 @@
             return 'パスワードは6文字以上で入力してください';
         if (m.includes('signup is disabled') || m.includes('email signups are disabled'))
             return '現在新規登録を受け付けていません';
+        if (m.includes('タイムアウト') || m.includes('timeout'))
+            return 'タイムアウトしました。通信状況を確認して再度お試しください';
+        if (m.includes('failed to fetch') || m.includes('network') || m.includes('通信エラー'))
+            return '通信エラーが発生しました。再度お試しください';
         return 'ログインに失敗しました。再度お試しください';
     }
 
@@ -3578,36 +3582,34 @@
                 errEl.textContent = 'パスワードは6文字以上で入力してください';
                 return;
             }
-
-            btn.disabled = true;
-            console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
-
             if (!sb) {
-                btn.disabled = false;
                 errEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。';
                 return;
             }
 
+            btn.disabled = true;
+            console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
+
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('タイムアウト: サーバーからの応答がありませんでした')), 10000)
+            );
+
             try {
                 if (authIsLogin) {
-                    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+                    const { data, error } = await Promise.race([
+                        sb.auth.signInWithPassword({ email, password }),
+                        timeout
+                    ]);
                     console.log('[Auth] signIn data:', data, 'error:', error);
-                    btn.disabled = false;
-                    if (error) {
-                        console.error('ログインエラー:', error);
-                        errEl.textContent = translateAuthError(error.message);
-                        return;
-                    }
+                    if (error) throw error;
                     await onAuthSuccess(data.session);
                 } else {
-                    const { data, error } = await sb.auth.signUp({ email, password });
+                    const { data, error } = await Promise.race([
+                        sb.auth.signUp({ email, password }),
+                        timeout
+                    ]);
                     console.log('[Auth] signUp data:', data, 'error:', error);
-                    btn.disabled = false;
-                    if (error) {
-                        console.error('登録エラー:', error);
-                        errEl.textContent = translateAuthError(error.message);
-                        return;
-                    }
+                    if (error) throw error;
                     if (!data.session) {
                         errEl.style.color = '#2a7a2a';
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
@@ -3616,9 +3618,10 @@
                     await onAuthSuccess(data.session);
                 }
             } catch (e) {
+                console.error('ログインエラー:', e);
+                errEl.textContent = translateAuthError(e.message);
+            } finally {
                 btn.disabled = false;
-                console.error('[Auth] 例外:', e);
-                errEl.textContent = '通信エラーが発生しました。再度お試しください';
             }
         };
         document.getElementById('auth-submit').addEventListener('click', submitAuth);
