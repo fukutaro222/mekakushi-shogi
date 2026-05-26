@@ -3687,17 +3687,8 @@
             errEl.style.color = '#c0392b';
             errEl.textContent = '';
 
-            // クライアント側バリデーション
             if (!email || !password) {
                 errEl.textContent = 'メールアドレスとパスワードを入力してください';
-                return;
-            }
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                errEl.textContent = '正しいメールアドレスを入力してください';
-                return;
-            }
-            if (!authIsLogin && password.length < 6) {
-                errEl.textContent = 'パスワードは6文字以上で入力してください';
                 return;
             }
             if (!sb) {
@@ -3706,58 +3697,40 @@
             }
 
             btn.disabled = true;
-            console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
+            btn.textContent = authIsLogin ? 'ログイン中...' : '登録中...';
 
-            const makeTimeout = (ms, msg) => new Promise((_, reject) =>
-                setTimeout(() => reject(new Error(msg)), ms)
-            );
-
-            let authSucceeded = false;
             try {
                 if (authIsLogin) {
-                    console.log('[Auth] signInWithPassword 呼び出し...');
-                    const { data, error } = await Promise.race([
-                        sb.auth.signInWithPassword({ email, password }),
-                        makeTimeout(10000, 'タイムアウト: サーバーからの応答がありませんでした')
-                    ]);
-                    console.log('[Auth] signIn data:', data, 'error:', error);
+                    const { data, error } = await sb.auth.signInWithPassword({ email, password });
                     if (error) throw error;
-                    if (!data?.session) throw new Error('セッションの取得に失敗しました。もう一度お試しください。');
-                    console.log('[Auth] ログイン成功。onAuthSuccess 呼び出し...');
-                    await onAuthSuccess(data.session);
-                    authSucceeded = true;
+                    // ログイン成功 → ページをリロードして確実にセッション反映
+                    location.reload();
+                    return;
                 } else {
-                    console.log('[Auth] signUp 呼び出し...');
-                    const { data, error } = await Promise.race([
-                        sb.auth.signUp({ email, password }),
-                        makeTimeout(10000, 'タイムアウト: サーバーからの応答がありませんでした')
-                    ]);
-                    console.log('[Auth] signUp data:', data, 'error:', error);
+                    const { data, error } = await sb.auth.signUp({ email, password });
                     if (error) throw error;
                     if (!data.session) {
                         errEl.style.color = '#2a7a2a';
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
                         return;
                     }
-                    await onAuthSuccess(data.session);
-                    authSucceeded = true;
+                    // 新規登録でセッションあり → リロード
+                    location.reload();
+                    return;
                 }
             } catch (e) {
-                console.error('ログインエラー:', e);
+                console.error('[Auth] エラー:', e);
                 errEl.textContent = translateAuthError(e.message);
             } finally {
                 btn.disabled = false;
-                if (authSucceeded) {
-                    // 同期・非同期どちらのタイミングでも確実にオーバーレイを閉じる
+                btn.textContent = authIsLogin ? 'ログイン' : '新規登録';
+                // リロードしない場合（エラー時）のフォールバック
+                if (currentUser) {
                     hideAuthOverlay();
-                    setTimeout(() => {
-                        hideAuthOverlay();
-                        // タイトル画面が fade-out/hidden になっていたら戻す
-                        const ts = document.getElementById('title-screen');
-                        if (ts && (ts.classList.contains('hidden') || ts.classList.contains('fade-out'))) {
-                            ts.classList.remove('hidden', 'fade-out');
-                        }
-                    }, 150);
+                    const ts = document.getElementById('title-screen');
+                    if (ts && (ts.classList.contains('hidden') || ts.classList.contains('fade-out'))) {
+                        ts.classList.remove('hidden', 'fade-out');
+                    }
                 }
             }
         };
