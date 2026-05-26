@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <script src="/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3360,11 +3360,15 @@
     // ── Supabase 認証 ──────────────────────────────────────────────────────────
     const SUPABASE_URL  = 'https://rmupcpezaodhkqorvuvc.supabase.co';
     const SUPABASE_ANON = 'sb_publishable_hD6CmImeRf5V2_R2kRulwQ_NyvWfbnw';
-    if (typeof supabase === 'undefined') {
-        console.error('[Supabase] CDNスクリプトが読み込まれていません');
+    let sb = null;
+    try {
+        if (typeof supabase === 'undefined') throw new Error('supabase is not defined');
+        const { createClient } = supabase;
+        sb = createClient(SUPABASE_URL, SUPABASE_ANON);
+        console.log('[Supabase] 初期化成功');
+    } catch (e) {
+        console.error('[Supabase] 初期化失敗:', e.message);
     }
-    const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON);
 
     let currentUser    = null;   // { id, email, nickname }
     let authIsLogin    = true;   // true=ログイン, false=新規登録
@@ -3513,6 +3517,15 @@
             document.getElementById('auth-overlay').classList.add('visible');
         }
 
+        // オーバーレイが開くたびに送信ボタンのdisabledをリセット
+        new MutationObserver(() => {
+            const overlay = document.getElementById('auth-overlay');
+            if (overlay.classList.contains('visible')) {
+                document.getElementById('auth-submit').disabled = false;
+                document.getElementById('auth-error').textContent = '';
+            }
+        }).observe(document.getElementById('auth-overlay'), { attributeFilter: ['class'] });
+
         // ページロード直後にボタンを表示（getSession() の完了を待たない）
         updateTitleAuth();
 
@@ -3567,30 +3580,28 @@
             }
 
             btn.disabled = true;
-            // ── [DEBUG] ボタンクリック検知 ──
-            alert(`[DEBUG①] ボタンクリック検知\nモード: ${authIsLogin ? 'ログイン' : '新規登録'}\nメール: ${email}\n\nSupabaseへリクエストを送ります...`);
             console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
+
+            if (!sb) {
+                btn.disabled = false;
+                errEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。';
+                return;
+            }
 
             try {
                 if (authIsLogin) {
-                    alert('[DEBUG②] sb.auth.signInWithPassword() 呼び出し中...\nURL: ' + SUPABASE_URL);
                     const { data, error } = await sb.auth.signInWithPassword({ email, password });
-                    console.log('[Auth] signIn response - data:', data, 'error:', error);
-                    // ── [DEBUG] レスポンス表示 ──
-                    alert(`[DEBUG③] signInWithPassword レスポンス\n\n● error:\n${error ? JSON.stringify({message: error.message, status: error.status, code: error.code}, null, 2) : 'null'}\n\n● data.session:\n${data?.session ? '取得成功 (user: ' + data.session.user?.email + ')' : 'null'}\n\n● data.user:\n${data?.user ? data.user.email : 'null'}`);
+                    console.log('[Auth] signIn data:', data, 'error:', error);
                     btn.disabled = false;
                     if (error) {
                         console.error('ログインエラー:', error);
                         errEl.textContent = translateAuthError(error.message);
                         return;
                     }
-                    console.log('ログイン成功:', data);
                     await onAuthSuccess(data.session);
                 } else {
-                    alert('[DEBUG②] sb.auth.signUp() 呼び出し中...\nURL: ' + SUPABASE_URL);
                     const { data, error } = await sb.auth.signUp({ email, password });
-                    console.log('[Auth] signUp response - data:', data, 'error:', error);
-                    alert(`[DEBUG③] signUp レスポンス\n\n● error:\n${error ? JSON.stringify({message: error.message, status: error.status, code: error.code}, null, 2) : 'null'}\n\n● data.session:\n${data?.session ? '取得成功' : 'null (メール確認待ち?)'}\n\n● data.user:\n${data?.user ? data.user.email + ' / confirmed: ' + data.user.email_confirmed_at : 'null'}`);
+                    console.log('[Auth] signUp data:', data, 'error:', error);
                     btn.disabled = false;
                     if (error) {
                         console.error('登録エラー:', error);
@@ -3602,13 +3613,11 @@
                         errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
                         return;
                     }
-                    console.log('登録成功:', data);
                     await onAuthSuccess(data.session);
                 }
             } catch (e) {
                 btn.disabled = false;
                 console.error('[Auth] 例外:', e);
-                alert(`[DEBUG エラー] 例外が発生しました\n\n${e.name}: ${e.message}\n\nstack: ${e.stack?.slice(0, 300)}`);
                 errEl.textContent = '通信エラーが発生しました。再度お試しください';
             }
         };
@@ -3658,6 +3667,7 @@
             msgEl.style.color = '#c0392b';
             msgEl.textContent = '';
             if (!email) { msgEl.textContent = 'メールアドレスを入力してください'; return; }
+            if (!sb) { msgEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。'; return; }
             btn.disabled = true;
             const { error } = await sb.auth.resetPasswordForEmail(email, {
                 redirectTo: 'https://mekakushi-shogi.vercel.app'
@@ -3681,6 +3691,7 @@
             if (!pass || !conf)    { msgEl.textContent = 'パスワードを入力してください'; return; }
             if (pass.length < 6)   { msgEl.textContent = 'パスワードは6文字以上で入力してください'; return; }
             if (pass !== conf)     { msgEl.textContent = 'パスワードが一致しません'; return; }
+            if (!sb) { msgEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。'; return; }
             btn.disabled = true;
             const { error } = await sb.auth.updateUser({ password: pass });
             btn.disabled = false;
@@ -3697,7 +3708,7 @@
         document.getElementById('logout-btn').addEventListener('click', async () => {
             if (!confirm('ログアウトしますか？')) return;
             if (pvpMode) pvpStop();
-            await sb.auth.signOut();
+            if (sb) await sb.auth.signOut();
             currentUser = null;
             document.getElementById('user-bar').classList.remove('visible');
             document.getElementById('auth-email').value = '';
@@ -4052,15 +4063,19 @@
         });
 
         // 既存セッション確認（ページロード時）
-        sb.auth.getSession().then(async ({ data: { session } }) => {
-            if (session) await onAuthSuccess(session);
+        if (sb) {
+            sb.auth.getSession().then(async ({ data: { session } }) => {
+                if (session) await onAuthSuccess(session);
+                updateTitleAuth();
+            }).catch(err => {
+                console.error('[Auth] セッション確認エラー:', err);
+                updateTitleAuth();
+            });
+        } else {
             updateTitleAuth();
-        }).catch(err => {
-            console.error('[Auth] セッション確認エラー:', err);
-            updateTitleAuth(); // エラー時もボタンを表示する
-        });
+        }
 
-        sb.auth.onAuthStateChange(async (event, session) => {
+        if (sb) sb.auth.onAuthStateChange(async (event, session) => {
             if (event === 'PASSWORD_RECOVERY') {
                 // リセットメールのリンクから戻った場合：パスワード再設定画面を表示
                 document.getElementById('newpass-input').value = '';
