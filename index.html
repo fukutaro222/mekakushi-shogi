@@ -2764,7 +2764,6 @@
                 <button class="title-btn" id="title-ranking-btn">ラ ン キ ン グ</button>
                 <button class="title-btn" id="title-settings-btn">設　　定</button>
             </div>
-            <div id="title-auth"></div>
         </div>
 
         <!-- 研究モードパネル（タイトル画面内） -->
@@ -3973,26 +3972,8 @@
                 });
                 cont.appendChild(logoutBtn);
             } else {
-                const loginBtn = document.createElement('button');
-                loginBtn.className = 'settings-item-btn';
-                loginBtn.textContent = 'ログイン';
-                loginBtn.addEventListener('click', () => {
-                    hideSettingsModal();
-                    hideBackBtn();
-                    document.getElementById('tab-login')?.click();
-                    document.getElementById('auth-overlay').classList.add('visible');
-                });
-                cont.appendChild(loginBtn);
-                const regBtn = document.createElement('button');
-                regBtn.className = 'settings-item-btn';
-                regBtn.textContent = '新規登録';
-                regBtn.addEventListener('click', () => {
-                    hideSettingsModal();
-                    hideBackBtn();
-                    document.getElementById('tab-register')?.click();
-                    document.getElementById('auth-overlay').classList.add('visible');
-                });
-                cont.appendChild(regBtn);
+                // 未ログイン時は設定モーダルにログインボタンを表示しない
+                // （右上の「新規登録 | ログイン」リンクを使用）
             }
             // ── ゲーム設定セクション ──────────────────────────────────────
             function addRow(label, items, current, onChange) {
@@ -7317,9 +7298,10 @@
         const el = document.getElementById('title-auth-corner');
         if (!el) return;
         if (currentUser) {
-            const nick = currentUser.nickname ?? currentUser.email;
-            const rank = currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200);
-            el.innerHTML = `<span class="title-auth-user">👤 ${nick}　${rank}</span>`;
+            const nick   = currentUser.nickname ?? currentUser.email;
+            const rank   = currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200);
+            const rating = currentUser.rating ?? 1200;
+            el.innerHTML = `<span class="title-auth-user">👤 ${nick}　${rank}　(${rating})</span>`;
         } else {
             el.innerHTML =
                 `<button class="title-auth-link" id="ta-register">新規登録</button>` +
