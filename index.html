@@ -1475,6 +1475,7 @@
         }
         #auth-overlay.visible { display: flex; }
         #auth-box {
+            position: relative;
             background: #f5e8cc;
             border-radius: 12px;
             padding: 36px 32px;
@@ -1484,6 +1485,20 @@
             flex-direction: column;
             gap: 14px;
         }
+        #auth-back-btn {
+            position: absolute;
+            top: 10px;
+            left: 12px;
+            background: transparent;
+            border: none;
+            color: #8b6a26;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        #auth-back-btn:hover { background: rgba(139,106,38,0.12); }
         #auth-box h2 {
             text-align: center;
             color: #c8a820;
@@ -3016,6 +3031,7 @@
 
             <!-- View 1: ログイン・新規登録 -->
             <div id="auth-view-main">
+                <button id="auth-back-btn">← 戻る</button>
                 <div class="auth-tabs">
                     <button class="auth-tab active" id="tab-login">ログイン</button>
                     <button class="auth-tab" id="tab-register">新規登録</button>
@@ -3339,14 +3355,14 @@
 
     function showBackBtn(cb) {
         _globalBackCb = cb;
-        document.getElementById('global-back-btn').style.display = '';
+        document.getElementById('global-back-btn').style.display = 'block';
     }
     function hideBackBtn() {
         _globalBackCb = null;
         document.getElementById('global-back-btn').style.display = 'none';
     }
     function showCpuHomeBtn() {
-        document.getElementById('cpu-home-btn').style.display = '';
+        document.getElementById('cpu-home-btn').style.display = 'block';
     }
     function hideCpuHomeBtn() {
         document.getElementById('cpu-home-btn').style.display = 'none';
@@ -3468,6 +3484,17 @@
     }
 
     function initAuthUI() {
+        // ── 認証オーバーレイ内の戻るボタン ──────────────────────────────────────
+        document.getElementById('auth-back-btn').addEventListener('click', () => {
+            if (authIsLogin) {
+                // ログイン画面: オーバーレイを閉じてタイトルへ
+                document.getElementById('auth-overlay').classList.remove('visible');
+            } else {
+                // 新規登録画面: ログインタブへ戻る
+                document.getElementById('tab-login').click();
+            }
+        });
+
         // タブ切替
         document.getElementById('tab-login').addEventListener('click', () => {
             authIsLogin = true;
@@ -3615,6 +3642,7 @@
         document.getElementById('title-kifu-btn').addEventListener('click', () => {
             if (currentUser) { showKifuHistory(); }
             else {
+                hideBackBtn();
                 document.getElementById('tab-login')?.click();
                 document.getElementById('auth-overlay').classList.add('visible');
             }
@@ -3623,6 +3651,7 @@
         document.getElementById('title-mm-btn').addEventListener('click', () => {
             if (!currentUser) {
                 showToast('自動マッチングにはログインが必要です');
+                hideBackBtn();
                 document.getElementById('tab-login')?.click();
                 document.getElementById('auth-overlay')?.classList.add('visible');
                 return;
@@ -4958,6 +4987,7 @@
         if (!currentUser) {
             showToast('ログインが必要です');
             hideMatchmakingPanel();
+            hideBackBtn();
             document.getElementById('tab-login')?.click();
             document.getElementById('auth-overlay')?.classList.add('visible');
             return;
@@ -7111,10 +7141,12 @@
                 `　｜　` +
                 `<button class="title-auth-link" id="ta-register">新規登録</button>`;
             document.getElementById('ta-login')?.addEventListener('click', () => {
+                hideBackBtn();
                 document.getElementById('tab-login')?.click();
                 document.getElementById('auth-overlay').classList.add('visible');
             });
             document.getElementById('ta-register')?.addEventListener('click', () => {
+                hideBackBtn();
                 document.getElementById('tab-register')?.click();
                 document.getElementById('auth-overlay').classList.add('visible');
             });
