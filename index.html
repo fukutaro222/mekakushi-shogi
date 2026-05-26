@@ -3453,32 +3453,37 @@
     }
 
     function translateAuthError(msg) {
-        if (!msg) return '不明なエラーが発生しました';
+        if (!msg) return 'ログインに失敗しました。再度お試しください';
         const m = msg.toLowerCase();
-        if (m.includes('invalid login credentials') || m.includes('invalid credentials') || m.includes('wrong password') || m.includes('invalid password'))
+        if (m.includes('invalid login credentials') || m.includes('invalid credentials') || m.includes('wrong password'))
             return 'メールアドレスまたはパスワードが間違っています';
         if (m.includes('email not confirmed') || m.includes('email not verified'))
-            return 'メールアドレスの確認が完了していません。届いたメールのリンクをクリックしてください';
+            return 'メールアドレスの確認が完了していません';
+        if (m.includes('too many requests') || m.includes('rate limit') || m.includes('over_email_send_rate_limit'))
+            return 'しばらく時間をおいてから再度お試しください';
         if (m.includes('user already registered') || m.includes('already registered') || m.includes('user already exists'))
             return 'このメールアドレスはすでに登録されています';
-        if (m.includes('password should be at least') || m.includes('password must be') || m.includes('weak password'))
+        if (m.includes('password should be at least') || m.includes('weak password') || m.includes('password must be'))
             return 'パスワードは6文字以上で入力してください';
-        if (m.includes('email rate limit exceeded') || m.includes('rate limit') || m.includes('over_email_send_rate_limit'))
-            return 'メール送信数の上限に達しました。しばらく時間をおいてからお試しください';
-        if (m.includes('invalid api key') || m.includes('invalid key') || m.includes('apikey') || m.includes('unauthorized'))
-            return '認証設定にエラーがあります。管理者にお問い合わせください';
-        if (m.includes('signup is disabled') || m.includes('email signups are disabled') || m.includes('signups not allowed'))
+        if (m.includes('signup is disabled') || m.includes('email signups are disabled'))
             return '現在新規登録を受け付けていません';
-        if (m.includes('user not found') || m.includes('no user found'))
-            return 'このメールアドレスは登録されていません';
-        if (m.includes('too many requests') || m.includes('request timeout'))
-            return 'リクエストが多すぎます。しばらく時間をおいてから再試行してください';
-        if (m.includes('network') || m.includes('fetch') || m.includes('failed to fetch') || m.includes('connection'))
-            return '通信エラーが発生しました。再度お試しください';
-        return msg;
+        return 'ログインに失敗しました。再度お試しください';
     }
 
     function initAuthUI() {
+        // URLハッシュにtype=recoveryが含まれる場合はパスワード再設定画面を表示
+        const _hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        if (_hashParams.get('type') === 'recovery') {
+            document.getElementById('auth-view-main').style.display = 'none';
+            document.getElementById('auth-view-reset').style.display = 'none';
+            document.getElementById('auth-view-newpass').style.display = 'flex';
+            document.getElementById('newpass-input').value = '';
+            document.getElementById('newpass-confirm').value = '';
+            document.getElementById('newpass-msg').textContent = '';
+            document.getElementById('newpass-submit-btn').disabled = false;
+            document.getElementById('auth-overlay').classList.add('visible');
+        }
+
         // ページロード直後にボタンを表示（getSession() の完了を待たない）
         updateTitleAuth();
 
@@ -3536,23 +3541,34 @@
             console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
 
             try {
-                const res = authIsLogin
-                    ? await sb.auth.signInWithPassword({ email, password })
-                    : await sb.auth.signUp({ email, password });
-                btn.disabled = false;
-
-                if (res.error) {
-                    console.error('[Auth] エラー:', res.error);
-                    errEl.textContent = translateAuthError(res.error.message);
-                    return;
+                if (authIsLogin) {
+                    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+                    console.log('[Auth] signIn response - data:', data, 'error:', error);
+                    btn.disabled = false;
+                    if (error) {
+                        console.error('ログインエラー:', error);
+                        errEl.textContent = translateAuthError(error.message);
+                        return;
+                    }
+                    console.log('ログイン成功:', data);
+                    await onAuthSuccess(data.session);
+                } else {
+                    const { data, error } = await sb.auth.signUp({ email, password });
+                    console.log('[Auth] signUp response - data:', data, 'error:', error);
+                    btn.disabled = false;
+                    if (error) {
+                        console.error('登録エラー:', error);
+                        errEl.textContent = translateAuthError(error.message);
+                        return;
+                    }
+                    if (!data.session) {
+                        errEl.style.color = '#2a7a2a';
+                        errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
+                        return;
+                    }
+                    console.log('登録成功:', data);
+                    await onAuthSuccess(data.session);
                 }
-                console.log('[Auth] 成功');
-                if (!authIsLogin && !res.data.session) {
-                    errEl.style.color = '#2a7a2a';
-                    errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
-                    return;
-                }
-                await onAuthSuccess(res.data.session);
             } catch (e) {
                 btn.disabled = false;
                 console.error('[Auth] 例外:', e);
@@ -3633,12 +3649,11 @@
             btn.disabled = false;
             if (error) { msgEl.textContent = translateAuthError(error.message); return; }
             msgEl.style.color = '#2a7a2a';
-            msgEl.textContent = 'パスワードを更新しました。';
-            setTimeout(async () => {
-                const { data: { session } } = await sb.auth.getSession();
-                if (session) await onAuthSuccess(session);
-                else showAuthView('main');
-            }, 1500);
+            msgEl.textContent = 'パスワードを変更しました。ログインしてください';
+            setTimeout(() => {
+                showAuthView('main');
+                document.getElementById('tab-login').click();
+            }, 2000);
         });
 
         // ログアウト
