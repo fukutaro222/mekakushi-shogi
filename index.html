@@ -3394,7 +3394,7 @@
             }
         });
 
-        // getSession: 既存セッションを確認し、完了後にWASMロードを開始
+        // getSession: 既存セッションを確認（WASMとは無関係）
         sb.auth.getSession().then(async ({ data: { session } }) => {
             console.log('[Auth] getSession 完了. session:', !!session);
             if (session) await onAuthSuccess(session);
@@ -3402,13 +3402,11 @@
         }).catch(err => {
             console.error('[Auth] getSession エラー:', err);
             updateTitleAuth();
-        }).finally(() => {
-            // 認証確認が終わってからWASMをロード（認証コールバックをブロックしない）
-            _startWasmEngine();
         });
+        // ※ WASMはページロード時に起動しない。ユーザーがWASMを選択した時だけ起動する
     } else {
-        // Supabase初期化失敗時もWASMは起動
-        setTimeout(_startWasmEngine, 100);
+        // Supabase初期化失敗時もupdateTitleAuth呼び出しのみ（WASM起動は行わない）
+        // updateTitleAuthはinitAuthUI内で呼ばれる
     }
 
     // WASMエンジン起動（認証完了後に呼ばれる）
@@ -3885,7 +3883,11 @@
             });
         }
         setupChoiceGroup('setup-teban',   v => { setupTeban  = v; });
-        setupChoiceGroup('setup-cpu',     v => { setupCpu    = v === 'wasm' ? 'wasm' : parseInt(v, 10); });
+        setupChoiceGroup('setup-cpu',     v => {
+            setupCpu = v === 'wasm' ? 'wasm' : parseInt(v, 10);
+            // WASMが選択された時だけオンデマンドでエンジンをロード
+            if (v === 'wasm' && !wasmReady) _startWasmEngine();
+        });
         setupChoiceGroup('setup-blind',   v => { setupBlind  = v === 'on'; setupNameless = v === 'nameless'; });
         setupChoiceGroup('setup-time',    v => { setupTime   = parseInt(v, 10); });
         setupChoiceGroup('setup-byoyomi', v => { setupByoyomi = parseInt(v, 10); });
