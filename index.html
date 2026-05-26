@@ -2463,7 +2463,7 @@
             flex-direction: column;
             align-items: center;
             gap: 14px;
-            margin-bottom: 36px;
+            margin-bottom: 20px;
         }
         .title-btn {
             width: clamp(200px, 50vw, 240px);
@@ -2495,23 +2495,14 @@
             box-shadow: 0 0 18px rgba(200, 168, 32, 0.2);
         }
         #title-auth {
-            color: rgba(200, 168, 80, 0.55);
-            font-size: 13px;
-            letter-spacing: 1px;
             text-align: center;
+            width: 100%;
         }
-        .title-auth-link {
-            color: rgba(200, 168, 32, 0.8);
-            text-decoration: underline;
-            cursor: pointer;
-            background: none;
-            border: none;
-            font: inherit;
+        .title-auth-user {
+            color: rgba(200, 168, 80, 0.7);
             font-size: 13px;
             letter-spacing: 1px;
-            padding: 0;
         }
-        .title-auth-link:hover { color: #c8a820; }
 
         /* ── タイトルコンテンツ hidden ── */
         #title-content.hidden { display: none; }
@@ -3488,6 +3479,9 @@
     }
 
     function initAuthUI() {
+        // ページロード直後にボタンを表示（getSession() の完了を待たない）
+        updateTitleAuth();
+
         // ── 認証オーバーレイ内の戻るボタン ──────────────────────────────────────
         document.getElementById('auth-back-btn').addEventListener('click', () => {
             if (authIsLogin) {
@@ -3802,6 +3796,27 @@
                     document.getElementById('logout-btn').click();
                 });
                 cont.appendChild(logoutBtn);
+            } else {
+                const loginBtn = document.createElement('button');
+                loginBtn.className = 'settings-item-btn';
+                loginBtn.textContent = 'ログイン';
+                loginBtn.addEventListener('click', () => {
+                    hideSettingsModal();
+                    hideBackBtn();
+                    document.getElementById('tab-login')?.click();
+                    document.getElementById('auth-overlay').classList.add('visible');
+                });
+                cont.appendChild(loginBtn);
+                const regBtn = document.createElement('button');
+                regBtn.className = 'settings-item-btn';
+                regBtn.textContent = '新規登録';
+                regBtn.addEventListener('click', () => {
+                    hideSettingsModal();
+                    hideBackBtn();
+                    document.getElementById('tab-register')?.click();
+                    document.getElementById('auth-overlay').classList.add('visible');
+                });
+                cont.appendChild(regBtn);
             }
             // ── ゲーム設定セクション ──────────────────────────────────────
             function addRow(label, items, current, onChange) {
@@ -3988,6 +4003,9 @@
         sb.auth.getSession().then(async ({ data: { session } }) => {
             if (session) await onAuthSuccess(session);
             updateTitleAuth();
+        }).catch(err => {
+            console.error('[Auth] セッション確認エラー:', err);
+            updateTitleAuth(); // エラー時もボタンを表示する
         });
 
         sb.auth.onAuthStateChange(async (event, session) => {
@@ -7144,18 +7162,19 @@
         if (currentUser) {
             const nick = currentUser.nickname ?? currentUser.email;
             const rank = currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200);
-            el.textContent = `👤 ${nick}　${rank}`;
+            el.innerHTML = `<div class="title-auth-user">👤 ${nick}　${rank}</div>`;
         } else {
             el.innerHTML =
-                `<button class="title-auth-link" id="ta-login">ログイン</button>` +
-                `　｜　` +
-                `<button class="title-auth-link" id="ta-register">新規登録</button>`;
-            document.getElementById('ta-login')?.addEventListener('click', () => {
+                `<div style="display:flex;flex-direction:column;align-items:center;gap:10px">` +
+                `<button class="title-btn primary" id="ta-login">ロ グ イ ン</button>` +
+                `<button class="title-btn" id="ta-register">新 規 登 録</button>` +
+                `</div>`;
+            document.getElementById('ta-login').addEventListener('click', () => {
                 hideBackBtn();
                 document.getElementById('tab-login')?.click();
                 document.getElementById('auth-overlay').classList.add('visible');
             });
-            document.getElementById('ta-register')?.addEventListener('click', () => {
+            document.getElementById('ta-register').addEventListener('click', () => {
                 hideBackBtn();
                 document.getElementById('tab-register')?.click();
                 document.getElementById('auth-overlay').classList.add('visible');
