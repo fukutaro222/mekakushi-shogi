@@ -3831,7 +3831,10 @@
             hideTitleScreen();
             pvpCreateRoom();
         });
-        document.getElementById('title-practice-btn').addEventListener('click', showSetupPanel);
+        document.getElementById('title-practice-btn').addEventListener('click', () => {
+            if (!wasmReady) _startWasmEngine();
+            showSetupPanel();
+        });
         document.getElementById('title-settings-btn').addEventListener('click', showSettingsModal);
         document.getElementById('title-kifu-btn').addEventListener('click', () => {
             if (currentUser) { showKifuHistory(); }
@@ -3884,8 +3887,6 @@
         setupChoiceGroup('setup-teban',   v => { setupTeban  = v; });
         setupChoiceGroup('setup-cpu',     v => {
             setupCpu = v === 'wasm' ? 'wasm' : parseInt(v, 10);
-            // WASMが選択された時だけオンデマンドでエンジンをロード
-            if (v === 'wasm' && !wasmReady) _startWasmEngine();
         });
         setupChoiceGroup('setup-blind',   v => { setupBlind  = v === 'on'; setupNameless = v === 'nameless'; });
         setupChoiceGroup('setup-time',    v => { setupTime   = parseInt(v, 10); });
@@ -9202,7 +9203,6 @@
 
     // Supabase 認証 UI 初期化（getSession/onAuthStateChangeは先頭で登録済み）
     initAuthUI();
-    // ※ WASMロードはgetSession完了後に_startWasmEngine()が自動的に呼び出す
     </script>
 </body>
 </html>
