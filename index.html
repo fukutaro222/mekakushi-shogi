@@ -2494,12 +2494,39 @@
             border-color: #c8a820;
             box-shadow: 0 0 18px rgba(200, 168, 32, 0.2);
         }
-        #title-auth {
-            text-align: center;
-            width: 100%;
+        #title-auth { display: none; }
+        /* 右上ログインリンク */
+        #title-auth-corner {
+            position: absolute;
+            top: 16px;
+            right: 18px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-family: 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+        }
+        .title-auth-link {
+            color: rgba(200, 168, 80, 0.75);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: inherit;
+            padding: 4px 2px;
+            text-decoration: none;
+            letter-spacing: 1px;
+            transition: color 0.2s;
+        }
+        .title-auth-link:hover { color: #c8a820; }
+        .title-auth-sep {
+            color: rgba(200, 168, 80, 0.35);
+            font-size: 12px;
+            user-select: none;
         }
         .title-auth-user {
-            color: rgba(200, 168, 80, 0.7);
+            color: rgba(200, 168, 80, 0.75);
             font-size: 13px;
             letter-spacing: 1px;
         }
@@ -2722,6 +2749,8 @@
     <div id="title-screen">
         <canvas id="title-canvas"></canvas>
         <div id="title-koma">王</div>
+        <!-- 右上ログイン/ユーザー表示 -->
+        <div id="title-auth-corner"></div>
         <div id="title-content">
             <h1 id="title-heading">目隠し将棋</h1>
             <p id="title-subtitle">MEKAKUSHI SHOGI</p>
@@ -3538,12 +3567,17 @@
             }
 
             btn.disabled = true;
+            // ── [DEBUG] ボタンクリック検知 ──
+            alert(`[DEBUG①] ボタンクリック検知\nモード: ${authIsLogin ? 'ログイン' : '新規登録'}\nメール: ${email}\n\nSupabaseへリクエストを送ります...`);
             console.log('[Auth] リクエスト送信:', authIsLogin ? 'signIn' : 'signUp', email);
 
             try {
                 if (authIsLogin) {
+                    alert('[DEBUG②] sb.auth.signInWithPassword() 呼び出し中...\nURL: ' + SUPABASE_URL);
                     const { data, error } = await sb.auth.signInWithPassword({ email, password });
                     console.log('[Auth] signIn response - data:', data, 'error:', error);
+                    // ── [DEBUG] レスポンス表示 ──
+                    alert(`[DEBUG③] signInWithPassword レスポンス\n\n● error:\n${error ? JSON.stringify({message: error.message, status: error.status, code: error.code}, null, 2) : 'null'}\n\n● data.session:\n${data?.session ? '取得成功 (user: ' + data.session.user?.email + ')' : 'null'}\n\n● data.user:\n${data?.user ? data.user.email : 'null'}`);
                     btn.disabled = false;
                     if (error) {
                         console.error('ログインエラー:', error);
@@ -3553,8 +3587,10 @@
                     console.log('ログイン成功:', data);
                     await onAuthSuccess(data.session);
                 } else {
+                    alert('[DEBUG②] sb.auth.signUp() 呼び出し中...\nURL: ' + SUPABASE_URL);
                     const { data, error } = await sb.auth.signUp({ email, password });
                     console.log('[Auth] signUp response - data:', data, 'error:', error);
+                    alert(`[DEBUG③] signUp レスポンス\n\n● error:\n${error ? JSON.stringify({message: error.message, status: error.status, code: error.code}, null, 2) : 'null'}\n\n● data.session:\n${data?.session ? '取得成功' : 'null (メール確認待ち?)'}\n\n● data.user:\n${data?.user ? data.user.email + ' / confirmed: ' + data.user.email_confirmed_at : 'null'}`);
                     btn.disabled = false;
                     if (error) {
                         console.error('登録エラー:', error);
@@ -3572,6 +3608,7 @@
             } catch (e) {
                 btn.disabled = false;
                 console.error('[Auth] 例外:', e);
+                alert(`[DEBUG エラー] 例外が発生しました\n\n${e.name}: ${e.message}\n\nstack: ${e.stack?.slice(0, 300)}`);
                 errEl.textContent = '通信エラーが発生しました。再度お試しください';
             }
         };
@@ -7172,18 +7209,17 @@
     }
 
     function updateTitleAuth() {
-        const el = document.getElementById('title-auth');
+        const el = document.getElementById('title-auth-corner');
         if (!el) return;
         if (currentUser) {
             const nick = currentUser.nickname ?? currentUser.email;
             const rank = currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200);
-            el.innerHTML = `<div class="title-auth-user">👤 ${nick}　${rank}</div>`;
+            el.innerHTML = `<span class="title-auth-user">👤 ${nick}　${rank}</span>`;
         } else {
             el.innerHTML =
-                `<div style="display:flex;flex-direction:column;align-items:center;gap:10px">` +
-                `<button class="title-btn primary" id="ta-login">ロ グ イ ン</button>` +
-                `<button class="title-btn" id="ta-register">新 規 登 録</button>` +
-                `</div>`;
+                `<button class="title-auth-link" id="ta-register">新規登録</button>` +
+                `<span class="title-auth-sep">|</span>` +
+                `<button class="title-auth-link" id="ta-login">ログイン</button>`;
             document.getElementById('ta-login').addEventListener('click', () => {
                 hideBackBtn();
                 document.getElementById('tab-login')?.click();
