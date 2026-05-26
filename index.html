@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3400,20 +3400,22 @@
     const SUPABASE_ANON = 'sb_publishable_hD6CmImeRf5V2_R2kRulwQ_NyvWfbnw';
     let sb = null;
     try {
-        if (typeof supabase === 'undefined') throw new Error('supabase is not defined');
+        if (typeof supabase === 'undefined') throw new Error('supabase CDN が読み込まれていません');
         const { createClient } = supabase;
+        if (typeof createClient !== 'function') throw new Error('createClient が見つかりません');
         sb = createClient(SUPABASE_URL, SUPABASE_ANON);
-        console.log('[Supabase] 初期化成功');
+        if (!sb || !sb.auth) throw new Error('Supabase client の auth モジュールが初期化されていません');
+        console.log('[Supabase] 初期化成功 auth:', !!sb.auth);
     } catch (e) {
         console.error('[Supabase] 初期化失敗:', e.message);
+        sb = null; // 確実に null にリセット
     }
 
     let currentUser    = null;   // { id, email, nickname }
     let authIsLogin    = true;   // true=ログイン, false=新規登録
 
     // ── 認証リスナーを最優先で登録（WASMロードより先に実行） ──────────────────
-    // ※ コールバック内で使う関数はすべてfunction宣言なので巻き上げで参照可能
-    if (sb) {
+    if (sb && sb.auth) {
         // onAuthStateChange: ログイン・ログアウト・パスワードリセットを検知
         sb.auth.onAuthStateChange(async (event, session) => {
             console.log('[Auth] onAuthStateChange:', event);
@@ -3432,7 +3434,7 @@
             }
         });
 
-        // getSession: 既存セッションを確認（WASMとは無関係）
+        // getSession: 既存セッションを確認
         sb.auth.getSession().then(async ({ data: { session } }) => {
             console.log('[Auth] getSession 完了. session:', !!session);
             if (session) await onAuthSuccess(session);
@@ -3733,8 +3735,9 @@
                 errEl.textContent = 'メールアドレスとパスワードを入力してください';
                 return;
             }
-            if (!sb) {
+            if (!sb || !sb.auth) {
                 errEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。';
+                console.error('[Auth] sb:', sb, 'sb.auth:', sb?.auth);
                 return;
             }
 
