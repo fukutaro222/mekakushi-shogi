@@ -2796,7 +2796,6 @@
             <div id="title-buttons">
                 <button class="title-btn primary" id="title-pvp-btn">対　　局</button>
                 <button class="title-btn primary" id="title-practice-btn">練 習 対 局</button>
-                <button class="title-btn primary" id="title-mm-btn">自動マッチング</button>
                 <button class="title-btn" id="title-board-btn">掲　示　板</button>
                 <button class="title-btn" id="title-research-btn">研 究 モ ー ド</button>
                 <button class="title-btn" id="title-kifu-btn">棋 譜 を 見 る</button>
@@ -3866,9 +3865,14 @@
 
         // タイトル画面ボタン
         document.getElementById('title-pvp-btn').addEventListener('click', () => {
-            clockEnabled = false; // PvPは時計なし
-            hideTitleScreen();
-            pvpCreateRoom();
+            if (!currentUser) {
+                showToast('対局にはログインが必要です');
+                hideBackBtn();
+                document.getElementById('tab-login')?.click();
+                showAuthOverlay();
+                return;
+            }
+            showMatchmakingPanel();
         });
         document.getElementById('title-practice-btn').addEventListener('click', () => {
             if (!wasmReady) _startWasmEngine();
@@ -3884,16 +3888,6 @@
             }
         });
         document.getElementById('title-ranking-btn').addEventListener('click', showRanking);
-        document.getElementById('title-mm-btn').addEventListener('click', () => {
-            if (!currentUser) {
-                showToast('自動マッチングにはログインが必要です');
-                hideBackBtn();
-                document.getElementById('tab-login')?.click();
-                showAuthOverlay();
-                return;
-            }
-            showMatchmakingPanel();
-        });
         document.getElementById('mm-back-btn').addEventListener('click', hideMatchmakingPanel);
         document.getElementById('mm-start-btn').addEventListener('click', startMatchmaking);
         document.getElementById('mm-cancel-btn').addEventListener('click', cancelMatchmaking);
