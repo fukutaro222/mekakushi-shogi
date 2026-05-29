@@ -1,5 +1,7 @@
--- games テーブル作成
-CREATE TABLE IF NOT EXISTS games (
+-- games テーブル再作成（既存テーブルを削除して作り直す）
+DROP TABLE IF EXISTS games CASCADE;
+
+CREATE TABLE games (
     id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
     sente_id            uuid        REFERENCES auth.users,
     gote_id             uuid        REFERENCES auth.users,
@@ -14,11 +16,11 @@ CREATE TABLE IF NOT EXISTS games (
     gote_rating_before  integer,
     sente_rating_after  integer,
     gote_rating_after   integer,
-    created_at           timestamptz DEFAULT now()
+    created_at          timestamptz DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS games_sente_id_idx ON games (sente_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS games_gote_id_idx  ON games (gote_id,  created_at DESC);
+CREATE INDEX games_sente_id_idx ON games (sente_id, created_at DESC);
+CREATE INDEX games_gote_id_idx  ON games (gote_id,  created_at DESC);
 
 ALTER TABLE games ENABLE ROW LEVEL SECURITY;
 
