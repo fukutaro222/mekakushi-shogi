@@ -14,11 +14,11 @@ CREATE TABLE IF NOT EXISTS games (
     gote_rating_before  integer,
     sente_rating_after  integer,
     gote_rating_after   integer,
-    played_at           timestamptz DEFAULT now()
+    created_at           timestamptz DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS games_sente_id_idx ON games (sente_id, played_at DESC);
-CREATE INDEX IF NOT EXISTS games_gote_id_idx  ON games (gote_id,  played_at DESC);
+CREATE INDEX IF NOT EXISTS games_sente_id_idx ON games (sente_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS games_gote_id_idx  ON games (gote_id,  created_at DESC);
 
 ALTER TABLE games ENABLE ROW LEVEL SECURITY;
 
