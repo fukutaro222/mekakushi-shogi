@@ -2839,9 +2839,9 @@
                 <div class="setup-section">
                     <div class="setup-label">持 ち 時 間</div>
                     <div class="setup-choices" id="mm-time">
-                        <button class="setup-choice" data-val="600">10 分</button>
+                        <button class="setup-choice active" data-val="600">10 分</button>
                         <button class="setup-choice" data-val="900">15 分</button>
-                        <button class="setup-choice active" data-val="1200">20 分</button>
+                        <button class="setup-choice" data-val="1200">20 分</button>
                         <button class="setup-choice" data-val="1800">30 分</button>
                         <button class="setup-choice" data-val="3600">60 分</button>
                     </div>
@@ -4312,7 +4312,7 @@
     let mmTimerInterval  = null;
     let mmStrength       = 'same';
     let mmTimeLimit      = 600;
-    let mmByoyomi        = 0;
+    let mmByoyomi        = 30;
     let mmSpectate       = true;
     let mmExpansion      = 0;   // 0=初期 1=30秒後拡張 2=60秒後拡張
 
