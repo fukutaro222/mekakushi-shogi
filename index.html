@@ -3726,51 +3726,46 @@
             const email    = document.getElementById('auth-email').value.trim();
             const password = document.getElementById('auth-password').value;
             const errEl    = document.getElementById('auth-error');
-            const btn      = this;
 
-            errEl.style.color = '#c0392b';
             errEl.textContent = '';
+            console.log('ログイン開始', email);
+            console.log('sb:', sb, 'sb.auth:', sb?.auth);
 
             if (!email || !password) {
+                errEl.style.color = '#c0392b';
                 errEl.textContent = 'メールアドレスとパスワードを入力してください';
                 return;
             }
             if (!sb || !sb.auth) {
+                errEl.style.color = '#c0392b';
                 errEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。';
-                console.error('[Auth] sb:', sb, 'sb.auth:', sb?.auth);
                 return;
             }
 
-            btn.disabled = true;
-            btn.textContent = authIsLogin ? 'ログイン中...' : '登録中...';
+            this.disabled = true;
+            this.textContent = 'ログイン中...';
 
             try {
-                if (authIsLogin) {
-                    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-                    if (error) throw error;
-                    // 成功 → リロードで確実に反映。リロードが遅延する場合は直接遷移も試みる
-                    window.location.reload(true);
-                    // リロードが発火するまでの間ボタンを有効に戻す
-                    setTimeout(() => { btn.disabled = false; btn.textContent = 'ログイン'; }, 500);
-                    return;
-                } else {
-                    const { data, error } = await sb.auth.signUp({ email, password });
-                    if (error) throw error;
-                    if (!data.session) {
-                        errEl.style.color = '#2a7a2a';
-                        errEl.textContent = '確認メールを送信しました。受信ボックスをご確認ください。';
-                        return;
-                    }
-                    window.location.reload(true);
-                    setTimeout(() => { btn.disabled = false; btn.textContent = '新規登録'; }, 500);
+                console.log('signInWithPassword 呼び出し中...');
+                const result = await sb.auth.signInWithPassword({ email, password });
+                console.log('結果:', JSON.stringify({ error: result.error?.message, hasSession: !!result.data?.session }));
+
+                if (result.error) {
+                    errEl.style.color = '#c0392b';
+                    errEl.textContent = translateAuthError(result.error.message);
                     return;
                 }
+
+                console.log('成功！トップページへ遷移します');
+                window.location.href = '/';
+
             } catch(e) {
-                console.error('[Auth] エラー:', e);
-                errEl.textContent = translateAuthError(e.message);
+                console.error('例外:', e);
+                errEl.style.color = '#c0392b';
+                errEl.textContent = '例外エラー: ' + (e.message ?? e);
             } finally {
-                btn.disabled = false;
-                btn.textContent = authIsLogin ? 'ログイン' : '新規登録';
+                this.disabled = false;
+                this.textContent = 'ログイン';
             }
         };
 
