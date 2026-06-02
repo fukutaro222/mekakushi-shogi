@@ -2773,6 +2773,13 @@
         body.board-green #shogi-board td.selected { background-color: rgba(100,190,50,0.52) !important; }
         body.board-green #shogi-board td.movable::after { background: rgba(100,190,50,0.52); }
         body.board-green #shogi-board td.star-cell::before { background: #1a2f0a; }
+        /* 盤面スタイル — 宇宙テーマ */
+        body.board-space #shogi-board { border-color: rgba(100,140,255,0.35); box-shadow: 0 0 18px rgba(80,100,255,0.25); }
+        body.board-space #shogi-board td { border-color: rgba(100,140,255,0.18); }
+        body.board-space #shogi-board td:hover { background-color: rgba(80,120,255,0.20); }
+        body.board-space #shogi-board td.selected { background-color: rgba(120,160,255,0.45) !important; }
+        body.board-space #shogi-board td.movable::after { background: rgba(100,180,255,0.40); }
+        body.board-space #shogi-board td.star-cell::before { background: rgba(60,80,160,0.6); }
 
         /* ── グローバル戻るボタン / CPUホームボタン ── */
         #global-back-btn, #cpu-home-btn {
@@ -4025,13 +4032,18 @@
                 soundEnabled,
                 val => { soundEnabled = val; saveSettings(); }
             );
+            addRow('対局BGM',
+                [{ val: true, text: '♪ ON' }, { val: false, text: '♩ OFF' }],
+                bgmEnabled,
+                val => { bgmEnabled = val; saveSettings(); if (!val) stopGameBGM(); }
+            );
             addRow('駒の種類',
                 [{ val: 1, text: '① 一文字' }, { val: 2, text: '② 二文字' }],
                 pieceStyle,
                 val => { pieceStyle = val; renderAll(); saveSettings(); }
             );
             addRow('盤　面',
-                [{ val: 1, text: '① 標準' }, { val: 2, text: '② 濃木目' }, { val: 3, text: '③ 緑盤' }],
+                [{ val: 1, text: '① 標準' }, { val: 2, text: '② 濃木目' }, { val: 3, text: '③ 緑盤' }, { val: 4, text: '④ 宇宙' }],
                 boardStyle,
                 val => { boardStyle = val; drawBoardGrain(); saveSettings(); }
             );
@@ -4188,26 +4200,29 @@
         p_silver: ['成','銀'], p_bishop: ['馬'],      p_rook:   ['龍'],
     };
     const ROW_KANJI = ['一','二','三','四','五','六','七','八','九'];
+    let _starSeed = 1;
 
     // ── ユーザー設定 ─────────────────────────────────────────────────────────
     const FEEDBACK_URL = 'https://forms.gle/h8Z8j6HxbG1EzNUz9';
     let soundEnabled = true;
     let pieceStyle   = 1;   // 1=一文字 2=二文字
-    let boardStyle   = 1;   // 1=通常 2=濃木目 3=グリーン
+    let boardStyle   = 1;   // 1=通常 2=濃木目 3=グリーン 4=宇宙
 
     function saveSettings() {
-        try { localStorage.setItem('mekakushi_cfg', JSON.stringify({ soundEnabled, pieceStyle, boardStyle })); } catch {}
+        try { localStorage.setItem('mekakushi_cfg', JSON.stringify({ soundEnabled, bgmEnabled, pieceStyle, boardStyle })); } catch {}
     }
     function loadSettings() {
         try {
             const s = JSON.parse(localStorage.getItem('mekakushi_cfg') || '{}');
             soundEnabled = s.soundEnabled ?? true;
+            bgmEnabled   = s.bgmEnabled   ?? true;
             pieceStyle   = s.pieceStyle   ?? 1;
             boardStyle   = s.boardStyle   ?? 1;
         } catch {}
     }
     function applyBoardStyle() {
         document.body.classList.toggle('board-green', boardStyle === 3);
+        document.body.classList.toggle('board-space', boardStyle === 4);
     }
 
     // ── 状態 ──────────────────────────────────────────────────────────────────
@@ -4349,6 +4364,7 @@
         senteByoyomiTime = setupByoyomi; goteByoyomiTime = setupByoyomi;
         stopClock();
         if (clockEnabled) startClock();
+        startGameBGM();
     }
 
     function pieceKanji(p) {
@@ -4541,22 +4557,123 @@
 
     // ── 移動実行 ───────────────────────────────────────────────────────────────
     let _audioCtx = null;
-    function playPieceSound() {
+    function _getAC() {
+        if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_audioCtx.state === 'suspended') _audioCtx.resume();
+        return _audioCtx;
+    }
+    // intensity: 0.7(打ち) ～ 1.0(普通) ～ 1.3(取り)
+    function playPieceSound(intensity = 1.0) {
         if (!soundEnabled) return;
         try {
-            if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const ac  = _audioCtx;
+            const ac = _getAC();
+            const t  = ac.currentTime;
+            const vol = Math.min(1.0, 0.35 + intensity * 0.22);
+
+            // ノイズバースト（木の打撃感）
+            const nSamples = Math.floor(ac.sampleRate * 0.07);
+            const nBuf = ac.createBuffer(1, nSamples, ac.sampleRate);
+            const nd = nBuf.getChannelData(0);
+            for (let i = 0; i < nSamples; i++) nd[i] = (Math.random() * 2 - 1);
+            const nSrc = ac.createBufferSource();
+            nSrc.buffer = nBuf;
+            const nGain = ac.createGain();
+            nSrc.connect(nGain); nGain.connect(ac.destination);
+            nGain.gain.setValueAtTime(vol * 0.40, t);
+            nGain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+            nSrc.start(t);
+
+            // 木の共鳴音（oscillator）
             const osc = ac.createOscillator();
-            const g   = ac.createGain();
-            osc.connect(g); g.connect(ac.destination);
+            const og  = ac.createGain();
+            osc.connect(og); og.connect(ac.destination);
             osc.type = 'triangle';
-            osc.frequency.setValueAtTime(920, ac.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(180, ac.currentTime + 0.09);
-            g.gain.setValueAtTime(0.55, ac.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.14);
-            osc.start(ac.currentTime);
-            osc.stop(ac.currentTime + 0.14);
+            osc.frequency.setValueAtTime(1080, t);
+            osc.frequency.exponentialRampToValueAtTime(240, t + 0.11);
+            og.gain.setValueAtTime(vol * 0.55, t + 0.001);
+            og.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+            osc.start(t);
+            osc.stop(t + 0.13);
         } catch {}
+    }
+
+    // ── 対局BGM ──────────────────────────────────────────────────────────────
+    let bgmEnabled = true;
+    let _bgmNodes  = [];
+    let _bgmTimer  = null;
+
+    // 日本五音音階 (ヨナ抜き短音階: D E F# A B)
+    const _BGM_NOTES = [293.66, 329.63, 369.99, 440.00, 493.88, 587.33, 659.25, 739.99, 880.00];
+    // 和風メロディパターン（インデックス）
+    const _BGM_SEQ = [
+        [0,0.9], [2,0.6], [4,0.5], [3,0.8], [1,0.7],
+        [4,0.9], [5,0.5], [3,0.6], [2,0.8], [0,1.0],
+        [4,0.7], [6,0.5], [5,0.8], [4,0.6], [2,0.9],
+        [3,0.6], [1,0.7], [0,0.5], [2,0.8], [4,0.9],
+    ];
+    const _BGM_NOTE_DUR = 1.15; // 1音の長さ(秒)
+    const _BGM_LOOP_DUR = _BGM_SEQ.length * _BGM_NOTE_DUR;
+
+    function _playKotoNote(ac, freq, startTime, vol) {
+        // 琴風：鋭いアタック→長めのディケイ
+        const osc  = ac.createOscillator();
+        const osc2 = ac.createOscillator();
+        const g    = ac.createGain();
+        osc.connect(g); osc2.connect(g); g.connect(ac.destination);
+        osc.type  = 'triangle';
+        osc2.type = 'sine';
+        osc.frequency.value  = freq;
+        osc2.frequency.value = freq * 2.01; // 倍音で色付け
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(vol, startTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(vol * 0.15, startTime + 0.3);
+        g.gain.exponentialRampToValueAtTime(0.001, startTime + _BGM_NOTE_DUR * 1.4);
+        osc.start(startTime);
+        osc2.start(startTime);
+        osc.stop(startTime + _BGM_NOTE_DUR * 1.5);
+        osc2.stop(startTime + _BGM_NOTE_DUR * 1.5);
+        return [osc, osc2, g];
+    }
+
+    function _scheduleBGMLoop(ac, loopStart) {
+        const nodes = [];
+        // ドローン（低音持続）
+        const drone = ac.createOscillator();
+        const dg    = ac.createGain();
+        drone.connect(dg); dg.connect(ac.destination);
+        drone.type = 'sine';
+        drone.frequency.value = _BGM_NOTES[0] * 0.5;
+        dg.gain.setValueAtTime(0.03, loopStart);
+        dg.gain.setValueAtTime(0.03, loopStart + _BGM_LOOP_DUR - 0.1);
+        dg.gain.linearRampToValueAtTime(0, loopStart + _BGM_LOOP_DUR);
+        drone.start(loopStart);
+        drone.stop(loopStart + _BGM_LOOP_DUR);
+        nodes.push(drone, dg);
+
+        _BGM_SEQ.forEach(([idx, vel], i) => {
+            const ns = _playKotoNote(ac, _BGM_NOTES[idx], loopStart + i * _BGM_NOTE_DUR, vel * 0.10);
+            nodes.push(...ns);
+        });
+        return nodes;
+    }
+
+    function startGameBGM() {
+        if (!bgmEnabled) return;
+        stopGameBGM();
+        try {
+            const ac = _getAC();
+            const loop = () => {
+                _bgmNodes = _scheduleBGMLoop(ac, ac.currentTime);
+                _bgmTimer = setTimeout(loop, _BGM_LOOP_DUR * 1000 - 50);
+            };
+            loop();
+        } catch {}
+    }
+
+    function stopGameBGM() {
+        if (_bgmTimer) { clearTimeout(_bgmTimer); _bgmTimer = null; }
+        _bgmNodes.forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch {} });
+        _bgmNodes = [];
     }
 
     function executeMove(fromR, fromC, toR, toC, autoPromote = false, suppressDialog = false) {
@@ -4581,7 +4698,7 @@
         }
         lastMovePromoted = !piece.promoted && (board[toR][toC].promoted ?? false);
         lastMoveDest = { r: toR, c: toC };
-        if (!replayMode) playPieceSound();
+        if (!replayMode) playPieceSound(cap ? 1.3 : 1.0);
     }
 
     function executeDrop(type, toR, toC) {
@@ -4591,7 +4708,7 @@
         board[toR][toC] = { type, player: currentTurn, promoted: false };
         lastMovePromoted = false;
         lastMoveDest = { r: toR, c: toC };
-        if (!replayMode) playPieceSound();
+        if (!replayMode) playPieceSound(0.8);
     }
 
     // ── やねうら王 WASM エンジン ───────────────────────────────────────────────
@@ -6850,6 +6967,27 @@
             // グリーン盤
             ctx.fillStyle = '#8aaf4a';
             ctx.fillRect(0, 0, w, h);
+        } else if (boardStyle === 4) {
+            // 宇宙テーマ：深宇宙グラデーション＋星
+            const grad = ctx.createRadialGradient(w*0.5, h*0.4, 0, w*0.5, h*0.5, Math.max(w,h)*0.75);
+            grad.addColorStop(0,   '#0d0730');
+            grad.addColorStop(0.4, '#060420');
+            grad.addColorStop(1,   '#020110');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+            // 星（ランダムドット）
+            const rng = () => Math.sin(w * h * 0.0001 + _starSeed++) * 10000 % 1;
+            _starSeed = 1;
+            for (let i = 0; i < 80; i++) {
+                const sx = Math.abs(rng()) * w;
+                const sy = Math.abs(rng()) * h;
+                const sr = Math.abs(rng()) * 1.4 + 0.3;
+                const sa = Math.abs(rng()) * 0.7 + 0.3;
+                ctx.beginPath();
+                ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(200,220,255,${sa})`;
+                ctx.fill();
+            }
         } else if (_boardTex && _boardTex.complete && _boardTex.naturalWidth > 0) {
             ctx.drawImage(_boardTex, 0, 0, w, h);
             if (boardStyle === 2) {
@@ -6909,15 +7047,31 @@
             ctx.strokeStyle = '#8b5a00'; ctx.lineWidth = 3;
             ctx.lineJoin = 'miter'; ctx.miterLimit = 10; ctx.stroke();
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillStyle = isPromoted ? '#cc0000' : '#1a0800';
+            if (isPromoted) {
+                ctx.fillStyle = '#e8000a';
+                ctx.shadowColor = 'rgba(220,0,0,0.45)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+            } else {
+                ctx.fillStyle = '#1a0800';
+                ctx.shadowColor = 'rgba(0,0,0,0.40)';
+                ctx.shadowBlur = 2;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+            }
             if (chars.length >= 2) {
-                ctx.font = '700 38px "Noto Serif JP","游明朝",serif';
-                ctx.fillText(chars[0], W / 2, 36);
+                ctx.font = '700 40px "Noto Serif JP","游明朝",serif';
+                ctx.fillText(chars[0], W / 2, 38);
                 ctx.fillText(chars[1], W / 2, 78);
             } else {
                 ctx.font = '700 64px "Noto Serif JP","游明朝",serif';
                 ctx.fillText(chars[0], W / 2, 64);
             }
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
         }
 
         return canvas;
@@ -7297,6 +7451,7 @@
         }
         hideContextMenu();
         hideResearchPanel();
+        stopGameBGM();
         updateTitleAuth();
         initTitleParticles();
     }
