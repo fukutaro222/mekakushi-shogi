@@ -6578,12 +6578,14 @@
         const flipped = (pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote');
         const gh = document.querySelector('.gote-hand-wrapper');
         const sh = document.querySelector('.sente-hand-wrapper');
+        const bl = document.querySelector('.board-layout');
         const gr = document.getElementById('gote-player-row');
         const sr = document.getElementById('sente-player-row');
         const gl = document.getElementById('gote-label');
         const sl = document.getElementById('sente-label');
         if (gh) gh.style.order = flipped ? '3' : '';
         if (sh) sh.style.order = flipped ? '1' : '';
+        if (bl) bl.style.order = flipped ? '2' : '';
         if (gr) gr.style.order = flipped ? '3' : '';
         if (sr) sr.style.order = flipped ? '1' : '';
         if (pvpMode) {
