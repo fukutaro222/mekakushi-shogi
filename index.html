@@ -4898,18 +4898,18 @@
     const LEVEL_DEPTH_WASM = [0, 1, 3, 5, 7, 10];
 
     async function askWasmMove() {
-        const depth  = LEVEL_DEPTH_WASM[cpuLevel] ?? 5;
         const posCmd = toPositionCmd();
         console.log('[Engine >]', posCmd);
         wasmEngine.postMessage(posCmd);
         return new Promise((resolve, reject) => {
             bestMoveResolve = resolve;
-            const goCmd = `go depth ${depth}`;
+            const goCmd = 'go movetime 5000';
             console.log('[Engine >]', goCmd);
             wasmEngine.postMessage(goCmd);
+            // 5秒で応答がない場合の安全網（go movetimeで通常は5秒以内に返る）
             setTimeout(() => {
                 if (bestMoveResolve) { bestMoveResolve = null; reject(new Error('timeout')); }
-            }, 60000);
+            }, 6000);
         });
     }
 
@@ -6799,7 +6799,24 @@
                 announceMove(result, moveSpeech, cpuSide);
                 return;
             } catch (e) {
-                console.error('[WASM] エラー → JSエンジンにフォールバック:', e);
+                console.warn('[WASM] タイムアウト/エラー → ランダム合法手:', e.message ?? e);
+                const moves = getAllLegalMovesStrict(cpuSide);
+                let moveSpeech = null;
+                if (moves.length > 0) {
+                    const mv = moves[Math.floor(Math.random() * moves.length)];
+                    if (mv.kind === 'board') executeMove(mv.fromR, mv.fromC, mv.toR, mv.toC, true);
+                    else executeDrop(mv.type, mv.toR, mv.toC);
+                    if (mv.kind === 'board') recordMove('board', mv.toR, mv.toC, { fromR: mv.fromR, fromC: mv.fromC, promote: board[mv.toR][mv.toC].promoted });
+                    else recordMove('drop', mv.toR, mv.toC, { pieceType: mv.type });
+                    moveSpeech = buildMoveSpeech(mv.kind, mv.toR, mv.toC, mv.fromR ?? null, mv.fromC ?? null);
+                }
+                resetByoyomiAfterMove(cpuSide);
+                currentTurn = playerSide;
+                computerThinking = false;
+                const result = checkPostMove(cpuSide, moveSpeech);
+                renderAll();
+                announceMove(result, moveSpeech, cpuSide);
+                return;
             }
         }
 
