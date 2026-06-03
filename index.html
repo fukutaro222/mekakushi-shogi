@@ -74,10 +74,28 @@
         .player-tag {
             background: #2e1406;
             color: #f0ddb0;
-            padding: 5px 28px;
+            padding: 4px 14px;
             border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1px;
+            min-width: 120px;
+        }
+        .ptag-role {
+            font-size: 11px;
+            color: #c49a3c;
+            letter-spacing: 1px;
+        }
+        .ptag-name {
             font-size: 13px;
-            letter-spacing: 3px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        .ptag-info {
+            font-size: 11px;
+            color: #c8b07a;
+            letter-spacing: 0;
         }
 
         /* ── 盤面レイアウト ── */
@@ -102,7 +120,7 @@
             flex-direction: column;
             padding-left: 5px;
             /* テーブルの上辺ボーダー(3px)分だけ下にずらして各マス中央に揃える */
-            padding-top: 2px;
+            padding-top: 3px;
         }
 
         .row-nums .lbl {
@@ -389,6 +407,29 @@
         }
 
         #voice-input-btn:hover { background: #6a3010; }
+
+        #voice-always-btn {
+            background: #1a3010;
+            color: #80c060;
+            border: 2px solid #3a6020;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            flex-shrink: 0;
+            white-space: nowrap;
+            transition: background 0.15s, border-color 0.15s;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #voice-always-btn:hover { background: #2a5020; }
+        #voice-always-btn.active {
+            background: #7a1000;
+            color: #ffbb99;
+            border-color: #dd3300;
+            animation: mic-pulse 1.5s ease-in-out infinite;
+        }
 
         /* ── 手番表示 ── */
         .turn-indicator {
@@ -3196,9 +3237,6 @@
     <!-- ユーザーバー -->
     <div id="user-bar">
         <span id="user-nickname-disp"></span>
-        <button id="nickname-btn">ニックネーム変更</button>
-        <button id="kifu-history-btn">棋譜</button>
-        <button id="logout-btn">ログアウト</button>
     </div>
     <div class="top-controls">
         <button id="resign-btn">投了</button>
@@ -3396,6 +3434,7 @@
     <!-- 音声操作バー -->
     <div class="voice-bar">
         <button id="mic-btn" title="押している間、音声を認識します">🎤</button>
+        <button id="voice-always-btn" title="常時音声認識のON/OFF">音声ON</button>
         <div class="voice-info">
             <div id="voice-label">ボタンを押しながら読み上げ（例：７六歩、２六飛）</div>
             <div id="voice-text"></div>
@@ -3868,8 +3907,8 @@
             }, 2000);
         });
 
-        // ログアウト
-        document.getElementById('logout-btn').addEventListener('click', async () => {
+        // ログアウト（user-barから削除済み、他の箇所から呼ばれる場合のため関数として残す）
+        document.getElementById('logout-btn')?.addEventListener('click', async () => {
             if (!confirm('ログアウトしますか？')) return;
             if (pvpMode) pvpStop();
             if (sb) await sb.auth.signOut();
@@ -4068,7 +4107,7 @@
         });
 
         // 棋譜一覧モーダル
-        document.getElementById('kifu-history-btn').addEventListener('click', showKifuHistory);
+        document.getElementById('kifu-history-btn')?.addEventListener('click', showKifuHistory);
         document.getElementById('kifu-history-close').addEventListener('click', hideKifuHistory);
         document.getElementById('kifu-history-modal').addEventListener('click', e => {
             if (e.target === document.getElementById('kifu-history-modal')) hideKifuHistory();
@@ -4174,7 +4213,7 @@
         document.getElementById('analyze-close').addEventListener('click', stopAnalysis);
 
         // ニックネームモーダル
-        document.getElementById('nickname-btn').addEventListener('click', showNicknameModal);
+        document.getElementById('nickname-btn')?.addEventListener('click', showNicknameModal);
         document.getElementById('nickname-save').addEventListener('click', saveNickname);
         document.getElementById('nickname-cancel').addEventListener('click', hideNicknameModal);
         document.getElementById('nickname-input').addEventListener('keydown', e => {
@@ -4889,7 +4928,7 @@
             return;
         }
         const isSenteTurn = currentTurn === 'sente' && !computerThinking && !gameOver;
-        const isGoteTurn  = !isSenteTurn && !gameOver;
+        const isGoteTurn  = currentTurn === 'gote'  && !computerThinking && !gameOver;
         se.classList.toggle('clock-active',  isSenteTurn);
         ge.classList.toggle('clock-active',  isGoteTurn);
         se.classList.toggle('clock-warning', isSenteTurn && (senteInByoyomi ? senteByoyomiTime <= 10 : senteTime <= 30));
@@ -4917,7 +4956,7 @@
                         else { stopClock(); onTimeout('sente'); return; }
                     }
                 }
-            } else {
+            } else if (currentTurn === 'gote' && !computerThinking) {
                 if (goteInByoyomi) {
                     goteByoyomiTime--;
                     if (goteByoyomiTime <= 0) { goteByoyomiTime = 0; stopClock(); onTimeout('gote'); return; }
@@ -6279,6 +6318,8 @@
                                 hostNickname: currentUser?.nickname ?? null,
                                 hostUserId:   currentUser?.id       ?? null,
                                 hostRating:   currentUser?.rating   ?? 1500,
+                                timeLimit:    setupTime,
+                                byoyomiVal:   setupByoyomi,
                                 roomId:       roomId });
                             pvpHideOverlay();
                             updatePvpLayout();
@@ -6424,11 +6465,11 @@
         inCheck      = data.inCheck ?? false;
         if (data.senteNick) {
             const el = document.getElementById('sente-label');
-            if (el) el.textContent = `先手 ${data.senteNick}`;
+            if (el) el.innerHTML = buildPlayerTag('先手', data.senteNick, null);
         }
         if (data.goteNick) {
             const el = document.getElementById('gote-label');
-            if (el) el.textContent = `後手 ${data.goteNick}`;
+            if (el) el.innerHTML = buildPlayerTag('後手', data.goteNick, null);
         }
         renderAll();
         if (data.gameOver) {
@@ -6525,6 +6566,12 @@
         if (d) d.className = `pvp-dot${state ? ' ' + state : ''}`;
     }
 
+    function buildPlayerTag(roleJP, nick, rating) {
+        const rank = ratingToRank(rating ?? 0);
+        const ratingStr = rating != null ? `${rating}` : '–';
+        return `<span class="ptag-role">${roleJP}</span><span class="ptag-name">${nick}</span><span class="ptag-info">${rank}　${ratingStr}</span>`;
+    }
+
     // 後手視点フリップ時のレイアウト調整
     function updatePvpLayout() {
         const flipped = (pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote');
@@ -6539,18 +6586,27 @@
         if (gr) gr.style.order = flipped ? '3' : '';
         if (sr) sr.style.order = flipped ? '1' : '';
         if (pvpMode) {
-            const myNick  = currentUser?.nickname ?? '自分';
-            const oppNick = opponentNickname ?? '相手';
+            const myNick   = currentUser?.nickname ?? '自分';
+            const myRating = currentUser?.rating ?? null;
+            const oppNick  = opponentNickname ?? '相手';
+            const oppRating = opponentRating ?? null;
             if (flipped) {
-                if (gl) gl.textContent = `先手 ${oppNick}`;
-                if (sl) sl.textContent = `後手 ${myNick}`;
+                if (gl) gl.innerHTML = buildPlayerTag('先手', oppNick, oppRating);
+                if (sl) sl.innerHTML = buildPlayerTag('後手', myNick, myRating);
             } else {
-                if (gl) gl.textContent = `後手 ${oppNick}`;
-                if (sl) sl.textContent = `先手 ${myNick}`;
+                if (gl) gl.innerHTML = buildPlayerTag('後手', oppNick, oppRating);
+                if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
             }
         } else {
-            if (gl) gl.textContent = '後手（上手）';
-            if (sl) sl.textContent = '先手（下手）';
+            const myNick   = currentUser?.nickname ?? 'あなた';
+            const myRating = currentUser?.rating ?? null;
+            if (flipped) {
+                if (gl) gl.innerHTML = buildPlayerTag('先手', 'CPU', null);
+                if (sl) sl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+            } else {
+                if (gl) gl.innerHTML = buildPlayerTag('後手', 'CPU', null);
+                if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
+            }
         }
         renderLabels();
     }
@@ -7306,6 +7362,7 @@
         document.getElementById('analyze-btn').disabled = false;
         document.getElementById('analyze-request-area').textContent = '';
         pvpAnalyzeAsked = false;
+        stopAlwaysListening();
         setTimeout(() => {
             document.getElementById('gameover-overlay').style.display = 'flex';
         }, 1400);
@@ -7430,6 +7487,7 @@
 
 
     function showTitleScreen() {
+        stopAlwaysListening();
         const ts = document.getElementById('title-screen');
         ts.classList.remove('fade-out', 'hidden');
         document.getElementById('title-content').classList.remove('hidden');
@@ -8737,8 +8795,9 @@
     // 方向→表示漢字
     const DIR_KANJI = { right:'右', left:'左', straight:'直', up:'上', down:'引', lateral:'寄' };
 
-    let micActive    = false;
-    let recognition  = null;
+    let micActive     = false;
+    let voiceAlwaysOn = false;
+    let recognition   = null;
     let lastVoiceText = '';   // 最後に認識されたテキスト（interim含む）
     let moveExecuted  = false; // 1回の発話で二重実行を防ぐフラグ
     let iosTimeoutId  = null;  // iOS 5秒タイムアウト用
@@ -8764,29 +8823,54 @@
             lastVoiceText = display;
             setVoiceText(display, !final);
             if (final) {
-                moveExecuted = true;
                 clearTimeout(iosTimeoutId);
                 tryVoiceMove(final);
+                // moveExecuted は tryVoiceMove 内の成功パスでセットされる
                 if (isIOS) { micActive = false; updateMicBtn(); }
             }
         };
 
         recognition.onerror = (event) => {
             clearTimeout(iosTimeoutId);
+            if (event.error === 'not-allowed') {
+                setVoiceText('マイクの使用が許可されていません', false);
+                voiceAlwaysOn = false;
+                updateVoiceAlwaysBtn();
+                micActive = false;
+                updateMicBtn();
+                return;
+            }
             if (event.error !== 'no-speech') setVoiceText(`エラー: ${event.error}`, false);
-            if (event.error === 'not-allowed') setVoiceText('マイクの使用が許可されていません', false);
-            micActive = false;
-            updateMicBtn();
+            if (!voiceAlwaysOn) {
+                micActive = false;
+                updateMicBtn();
+            }
+            // voiceAlwaysOn の場合は onend が再起動を処理する
         };
 
         recognition.onend = () => {
             clearTimeout(iosTimeoutId);
-            if (!isIOS && micActive) {
+            if (voiceAlwaysOn) {
+                // 常時ONモード: final が来なかった場合に interim テキストをフォールバック処理
+                if (!moveExecuted && lastVoiceText) tryVoiceMove(lastVoiceText);
+                moveExecuted  = false;
+                lastVoiceText = '';
+                setVoiceText('待機中…', true);
+                setTimeout(() => {
+                    if (!voiceAlwaysOn) return;
+                    try { recognition.start(); }
+                    catch(e) {
+                        setVoiceText('再起動エラー', false);
+                        voiceAlwaysOn = false;
+                        updateVoiceAlwaysBtn();
+                    }
+                }, isIOS ? 600 : 200);
+            } else if (!isIOS && micActive) {
                 // 非 iOS: ボタン押下中は再起動してホールド継続
                 try { recognition.start(); }
                 catch(e) { micActive = false; updateMicBtn(); }
             } else {
-                // iOS: 再起動しない。最後のテキストでフォールバック処理
+                // iOS または ボタン離し後のフォールバック処理
                 if (!moveExecuted && lastVoiceText) tryVoiceMove(lastVoiceText);
                 micActive = false;
                 updateMicBtn();
@@ -8797,6 +8881,8 @@
     function startListening() {
         if (!recognition) { setVoiceText('このブラウザは音声認識に未対応です', false); return; }
         if (micActive) return;
+        // 常時ONが動いていれば一時停止して引き継ぐ
+        if (voiceAlwaysOn) { voiceAlwaysOn = false; updateVoiceAlwaysBtn(); }
         micActive     = true;
         moveExecuted  = false;
         lastVoiceText = '';
@@ -8840,6 +8926,43 @@
 
     function updateMicBtn() {
         document.getElementById('mic-btn')?.classList.toggle('active', micActive);
+    }
+
+    function startAlwaysListening() {
+        if (!recognition) { setVoiceText('このブラウザは音声認識に未対応です', false); return; }
+        // ホールドモードが動いていれば停止
+        if (micActive) { micActive = false; try { recognition.stop(); } catch(e) {} }
+        voiceAlwaysOn = true;
+        updateVoiceAlwaysBtn();
+        if (!localStorage.getItem('voiceMicNoted')) {
+            localStorage.setItem('voiceMicNoted', '1');
+            showToast('マイクの使用を許可してください（ブラウザの確認画面が表示されます）');
+        }
+        moveExecuted  = false;
+        lastVoiceText = '';
+        setVoiceText('待機中…', true);
+        try { recognition.start(); }
+        catch(e) {
+            console.log('[Voice] always-on start error', e);
+            setVoiceText('認識開始エラー', false);
+            voiceAlwaysOn = false;
+            updateVoiceAlwaysBtn();
+        }
+    }
+
+    function stopAlwaysListening() {
+        if (!voiceAlwaysOn) return;
+        voiceAlwaysOn = false;
+        updateVoiceAlwaysBtn();
+        setVoiceText('', false);
+        try { recognition?.stop(); } catch(e) {}
+    }
+
+    function updateVoiceAlwaysBtn() {
+        const btn = document.getElementById('voice-always-btn');
+        if (!btn) return;
+        btn.textContent = voiceAlwaysOn ? '音声OFF' : '音声ON';
+        btn.classList.toggle('active', voiceAlwaysOn);
     }
 
     function setVoiceText(text, isInterim) {
@@ -9054,7 +9177,7 @@
         const result = findAndExecuteVoiceMove(parsed);
         if (result) {
             moveExecuted = true;
-            stopListening();
+            if (!voiceAlwaysOn) stopListening(); // 常時ONモードは onend が再起動を処理する
             setVoiceText(`${parsed.displayText} ✓`, false);
             if (parsed.isDrop) recordMove('drop', parsed.r, parsed.c, { pieceType: parsed.baseType });
             else recordMove('board', parsed.r, parsed.c, { fromR: result.fromR, fromC: result.fromC, promote: board[parsed.r][parsed.c].promoted });
@@ -9131,6 +9254,11 @@
             micBtn.addEventListener('touchcancel',stopListening);
         }
     }
+
+    // 常時音声認識ボタンのイベント
+    document.getElementById('voice-always-btn')?.addEventListener('click', () => {
+        if (voiceAlwaysOn) stopAlwaysListening(); else startAlwaysListening();
+    });
 
     // 手動テキスト入力のイベント
     const voiceInputEl  = document.getElementById('voice-input');
