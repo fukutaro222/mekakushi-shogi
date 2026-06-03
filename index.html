@@ -6575,64 +6575,52 @@
 
     // 後手視点フリップ時のレイアウト調整
     function updatePvpLayout() {
-        const flipped = (pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote');
+        const iAmSente = !pvpMode ? (playerSide !== 'gote') : (myRole === 'sente');
+        // 自分 = 下側(手前)、相手 = 上側(奥)
+        // iAmSente=true: 上=後手(相手), 下=先手(自分)
+        // iAmSente=false: 上=先手(相手), 下=後手(自分)
+        const flipped = !iAmSente;
 
-        // DOM reorder: physically move elements so CSS order conflicts cannot interfere
-        function reorder(parent, ...nodes) {
-            nodes.forEach(n => { if (n && n.parentNode === parent) parent.removeChild(n); });
-            nodes.forEach(n => { if (n) parent.appendChild(n); });
-        }
-
+        // board-section の flex-direction を反転させるだけで上下が確実に入れ替わる
+        // 通常(column): DOM順 [後手row, 盤面, 先手row] → 上=後手, 下=先手
+        // 反転(column-reverse): 視覚順 [先手row, 盤面, 後手row] → 上=先手, 下=後手
         const boardSection = document.querySelector('.board-section');
-        const gr = document.getElementById('gote-player-row');
-        const sr = document.getElementById('sente-player-row');
-        const bl = document.querySelector('.board-layout');
-        if (boardSection && gr && sr && bl) {
-            gr.style.order = ''; sr.style.order = ''; bl.style.order = '';
-            if (flipped) {
-                reorder(boardSection, sr, bl, gr); // 上: 先手(相手), 下: 後手(自分)
-            } else {
-                reorder(boardSection, gr, bl, sr); // 上: 後手(相手), 下: 先手(自分)
-            }
+        if (boardSection) {
+            boardSection.style.flexDirection = flipped ? 'column-reverse' : '';
         }
 
-        const gameArea = document.querySelector('.game-area');
+        // モバイル縦並びの持ち駒エリアも入れ替え
         const gh = document.querySelector('.gote-hand-wrapper');
         const sh = document.querySelector('.sente-hand-wrapper');
-        const bs = boardSection;
-        const kw = document.querySelector('.kifu-wrapper');
-        if (gameArea && gh && sh && bs && kw) {
-            gh.style.order = ''; sh.style.order = ''; bs.style.order = ''; kw.style.order = '';
-            if (flipped) {
-                reorder(gameArea, sh, bs, gh, kw);
-            } else {
-                reorder(gameArea, gh, bs, sh, kw);
-            }
-        }
+        if (gh) gh.style.order = flipped ? '3' : '';
+        if (sh) sh.style.order = flipped ? '1' : '';
 
+        // ラベル更新: 上側=相手、下側=自分
         const gl = document.getElementById('gote-label');
         const sl = document.getElementById('sente-label');
         if (pvpMode) {
-            const myNick   = currentUser?.nickname ?? '自分';
-            const myRating = currentUser?.rating ?? null;
-            const oppNick  = opponentNickname ?? '相手';
+            const myNick    = currentUser?.nickname ?? '自分';
+            const myRating  = currentUser?.rating ?? null;
+            const oppNick   = opponentNickname ?? '相手';
             const oppRating = opponentRating ?? null;
-            if (flipped) {
-                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
-                if (sl) sl.innerHTML = buildPlayerTag('先手', oppNick, oppRating);
-            } else {
+            if (iAmSente) {
+                // 上=後手(相手), 下=先手(自分)
                 if (gl) gl.innerHTML = buildPlayerTag('後手', oppNick, oppRating);
                 if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
+            } else {
+                // 上=先手(相手), 下=後手(自分)  ← column-reverse で視覚的に逆転
+                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+                if (sl) sl.innerHTML = buildPlayerTag('先手', oppNick, oppRating);
             }
         } else {
             const myNick   = currentUser?.nickname ?? 'あなた';
             const myRating = currentUser?.rating ?? null;
-            if (flipped) {
-                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
-                if (sl) sl.innerHTML = buildPlayerTag('先手', 'CPU', null);
-            } else {
+            if (iAmSente) {
                 if (gl) gl.innerHTML = buildPlayerTag('後手', 'CPU', null);
                 if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
+            } else {
+                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+                if (sl) sl.innerHTML = buildPlayerTag('先手', 'CPU', null);
             }
         }
         renderLabels();
