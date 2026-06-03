@@ -6594,13 +6594,21 @@
         const topRole    = iAmSente ? '後手' : '先手';  // 上=相手の役割
         const bottomRole = iAmSente ? '先手' : '後手';  // 下=自分の役割
 
-        // board-section に gote-pov クラスをトグル（CSS !important で確実に逆転）
-        // column: DOM順 [後手row, 盤面, 先手row] → 上=後手, 下=先手
-        // column-reverse (gote-pov): 上=先手, 下=後手
+        // board-section の子要素に order を直接設定してレイアウトを制御
+        // 先手視点(iAmSente=true):  DOM順のまま → 上=後手row(相手), 下=先手row(自分)
+        // 後手視点(iAmSente=false): order指定  → 上=先手row(相手), 下=後手row(自分)
         const boardSection = document.querySelector('.board-section');
-        if (boardSection) {
-            boardSection.style.flexDirection = '';  // inline指定をクリア
-            boardSection.classList.toggle('gote-pov', !iAmSente);
+        const goteRow   = document.getElementById('gote-player-row');
+        const senteRow  = document.getElementById('sente-player-row');
+        const boardLayoutEl = boardSection ? boardSection.querySelector('.board-layout') : null;
+        if (!iAmSente) {
+            if (senteRow)     senteRow.style.order     = '1';
+            if (boardLayoutEl) boardLayoutEl.style.order = '2';
+            if (goteRow)      goteRow.style.order      = '3';
+        } else {
+            if (senteRow)     senteRow.style.order     = '';
+            if (boardLayoutEl) boardLayoutEl.style.order = '';
+            if (goteRow)      goteRow.style.order      = '';
         }
 
         // モバイル縦並びの持ち駒エリアも入れ替え
@@ -6610,8 +6618,8 @@
         if (sh) sh.style.order = !iAmSente ? '1' : '';
 
         // ラベル: gote-label は DOM上は「後手row」に属する
-        // iAmSente=true  (column):         gote-row=上 → topRole(後手=相手), sente-row=下 → bottomRole(先手=自分)
-        // iAmSente=false (column-reverse): gote-row=下 → bottomRole(後手=自分), sente-row=上 → topRole(先手=相手)
+        // iAmSente=true:  gote-row=上 → topRole(後手=相手), sente-row=下 → bottomRole(先手=自分)
+        // iAmSente=false: gote-row=下(order:3) → bottomRole(後手=自分), sente-row=上(order:1) → topRole(先手=相手)
         const gl = document.getElementById('gote-label');
         const sl = document.getElementById('sente-label');
         if (pvpMode) {
