@@ -6576,18 +6576,42 @@
     // 後手視点フリップ時のレイアウト調整
     function updatePvpLayout() {
         const flipped = (pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote');
-        const gh = document.querySelector('.gote-hand-wrapper');
-        const sh = document.querySelector('.sente-hand-wrapper');
-        const bl = document.querySelector('.board-layout');
+
+        // DOM reorder: physically move elements so CSS order conflicts cannot interfere
+        function reorder(parent, ...nodes) {
+            nodes.forEach(n => { if (n && n.parentNode === parent) parent.removeChild(n); });
+            nodes.forEach(n => { if (n) parent.appendChild(n); });
+        }
+
+        const boardSection = document.querySelector('.board-section');
         const gr = document.getElementById('gote-player-row');
         const sr = document.getElementById('sente-player-row');
+        const bl = document.querySelector('.board-layout');
+        if (boardSection && gr && sr && bl) {
+            gr.style.order = ''; sr.style.order = ''; bl.style.order = '';
+            if (flipped) {
+                reorder(boardSection, sr, bl, gr); // 上: 先手(相手), 下: 後手(自分)
+            } else {
+                reorder(boardSection, gr, bl, sr); // 上: 後手(相手), 下: 先手(自分)
+            }
+        }
+
+        const gameArea = document.querySelector('.game-area');
+        const gh = document.querySelector('.gote-hand-wrapper');
+        const sh = document.querySelector('.sente-hand-wrapper');
+        const bs = boardSection;
+        const kw = document.querySelector('.kifu-wrapper');
+        if (gameArea && gh && sh && bs && kw) {
+            gh.style.order = ''; sh.style.order = ''; bs.style.order = ''; kw.style.order = '';
+            if (flipped) {
+                reorder(gameArea, sh, bs, gh, kw);
+            } else {
+                reorder(gameArea, gh, bs, sh, kw);
+            }
+        }
+
         const gl = document.getElementById('gote-label');
         const sl = document.getElementById('sente-label');
-        if (gh) gh.style.order = flipped ? '3' : '';
-        if (sh) sh.style.order = flipped ? '1' : '';
-        if (bl) bl.style.order = flipped ? '2' : '';
-        if (gr) gr.style.order = flipped ? '3' : '';
-        if (sr) sr.style.order = flipped ? '1' : '';
         if (pvpMode) {
             const myNick   = currentUser?.nickname ?? '自分';
             const myRating = currentUser?.rating ?? null;
