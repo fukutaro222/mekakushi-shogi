@@ -69,6 +69,10 @@
             align-items: center;
             gap: 8px;
         }
+        /* 後手視点：上下を反転（!importantでinline styleより確実に優先） */
+        .board-section.gote-pov {
+            flex-direction: column-reverse !important;
+        }
 
         /* ── プレイヤーラベル ── */
         .player-tag {
@@ -4927,12 +4931,20 @@
             ge.classList.remove('clock-active', 'clock-warning');
             return;
         }
-        const isSenteTurn = currentTurn === 'sente' && !computerThinking && !gameOver;
-        const isGoteTurn  = currentTurn === 'gote'  && !computerThinking && !gameOver;
-        se.classList.toggle('clock-active',  isSenteTurn);
-        ge.classList.toggle('clock-active',  isGoteTurn);
-        se.classList.toggle('clock-warning', isSenteTurn && (senteInByoyomi ? senteByoyomiTime <= 10 : senteTime <= 30));
-        ge.classList.toggle('clock-warning', isGoteTurn  && (goteInByoyomi  ? goteByoyomiTime  <= 10 : goteTime  <= 30));
+        // 自分がsenteかを判定し、isMyTurn で自分／相手のクロックをハイライト
+        const iAmSente   = pvpMode ? (myRole === 'sente') : true;
+        const isMyTurn   = ((currentTurn === 'sente') === iAmSente) && !computerThinking && !gameOver;
+        const isOppTurn  = !isMyTurn && !computerThinking && !gameOver;
+        const myClockEl  = iAmSente ? se : ge;   // 自分のクロック要素
+        const oppClockEl = iAmSente ? ge : se;   // 相手のクロック要素
+        myClockEl.classList.toggle('clock-active',  isMyTurn);
+        oppClockEl.classList.toggle('clock-active', isOppTurn);
+        myClockEl.classList.toggle('clock-warning', isMyTurn  && (iAmSente
+            ? (senteInByoyomi ? senteByoyomiTime <= 10 : senteTime <= 30)
+            : (goteInByoyomi  ? goteByoyomiTime  <= 10 : goteTime  <= 30)));
+        oppClockEl.classList.toggle('clock-warning', isOppTurn && (iAmSente
+            ? (goteInByoyomi  ? goteByoyomiTime  <= 10 : goteTime  <= 30)
+            : (senteInByoyomi ? senteByoyomiTime <= 10 : senteTime <= 30)));
     }
 
     function stopClock() {
@@ -6575,27 +6587,31 @@
 
     // 後手視点フリップ時のレイアウト調整
     function updatePvpLayout() {
-        const iAmSente = !pvpMode ? (playerSide !== 'gote') : (myRole === 'sente');
-        // 自分 = 下側(手前)、相手 = 上側(奥)
-        // iAmSente=true: 上=後手(相手), 下=先手(自分)
-        // iAmSente=false: 上=先手(相手), 下=後手(自分)
-        const flipped = !iAmSente;
+        // 自分がsenteかどうか（PvP: myRole, CPU: playerSide で判定）
+        const iAmSente = pvpMode ? (myRole === 'sente') : (playerSide !== 'gote');
 
-        // board-section の flex-direction を反転させるだけで上下が確実に入れ替わる
-        // 通常(column): DOM順 [後手row, 盤面, 先手row] → 上=後手, 下=先手
-        // 反転(column-reverse): 視覚順 [先手row, 盤面, 後手row] → 上=先手, 下=後手
+        // 上側（奥）= 相手、下側（手前）= 自分
+        const topRole    = iAmSente ? '後手' : '先手';  // 上=相手の役割
+        const bottomRole = iAmSente ? '先手' : '後手';  // 下=自分の役割
+
+        // board-section に gote-pov クラスをトグル（CSS !important で確実に逆転）
+        // column: DOM順 [後手row, 盤面, 先手row] → 上=後手, 下=先手
+        // column-reverse (gote-pov): 上=先手, 下=後手
         const boardSection = document.querySelector('.board-section');
         if (boardSection) {
-            boardSection.style.flexDirection = flipped ? 'column-reverse' : '';
+            boardSection.style.flexDirection = '';  // inline指定をクリア
+            boardSection.classList.toggle('gote-pov', !iAmSente);
         }
 
         // モバイル縦並びの持ち駒エリアも入れ替え
         const gh = document.querySelector('.gote-hand-wrapper');
         const sh = document.querySelector('.sente-hand-wrapper');
-        if (gh) gh.style.order = flipped ? '3' : '';
-        if (sh) sh.style.order = flipped ? '1' : '';
+        if (gh) gh.style.order = !iAmSente ? '3' : '';
+        if (sh) sh.style.order = !iAmSente ? '1' : '';
 
-        // ラベル更新: 上側=相手、下側=自分
+        // ラベル: gote-label は DOM上は「後手row」に属する
+        // iAmSente=true  (column):         gote-row=上 → topRole(後手=相手), sente-row=下 → bottomRole(先手=自分)
+        // iAmSente=false (column-reverse): gote-row=下 → bottomRole(後手=自分), sente-row=上 → topRole(先手=相手)
         const gl = document.getElementById('gote-label');
         const sl = document.getElementById('sente-label');
         if (pvpMode) {
@@ -6604,23 +6620,21 @@
             const oppNick   = opponentNickname ?? '相手';
             const oppRating = opponentRating ?? null;
             if (iAmSente) {
-                // 上=後手(相手), 下=先手(自分)
-                if (gl) gl.innerHTML = buildPlayerTag('後手', oppNick, oppRating);
-                if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
+                if (gl) gl.innerHTML = buildPlayerTag(topRole,    oppNick, oppRating);  // 後手=相手
+                if (sl) sl.innerHTML = buildPlayerTag(bottomRole, myNick,  myRating);   // 先手=自分
             } else {
-                // 上=先手(相手), 下=後手(自分)  ← column-reverse で視覚的に逆転
-                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
-                if (sl) sl.innerHTML = buildPlayerTag('先手', oppNick, oppRating);
+                if (gl) gl.innerHTML = buildPlayerTag(bottomRole, myNick,  myRating);   // 後手=自分（下）
+                if (sl) sl.innerHTML = buildPlayerTag(topRole,    oppNick, oppRating);  // 先手=相手（上）
             }
         } else {
             const myNick   = currentUser?.nickname ?? 'あなた';
             const myRating = currentUser?.rating ?? null;
             if (iAmSente) {
-                if (gl) gl.innerHTML = buildPlayerTag('後手', 'CPU', null);
-                if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
+                if (gl) gl.innerHTML = buildPlayerTag(topRole,    'CPU',   null);
+                if (sl) sl.innerHTML = buildPlayerTag(bottomRole, myNick,  myRating);
             } else {
-                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
-                if (sl) sl.innerHTML = buildPlayerTag('先手', 'CPU', null);
+                if (gl) gl.innerHTML = buildPlayerTag(bottomRole, myNick,  myRating);
+                if (sl) sl.innerHTML = buildPlayerTag(topRole,    'CPU',   null);
             }
         }
         renderLabels();
