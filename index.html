@@ -4011,6 +4011,7 @@
             let side = setupTeban;
             if (side === 'random') side = Math.random() < 0.5 ? 'sente' : 'gote';
             playerSide = side;
+            console.log('[DEBUG] playerSide set:', playerSide);
 
             // CPUレベル設定
             cpuLevel = setupCpu === 'wasm' ? 5 : setupCpu;
@@ -4025,6 +4026,7 @@
             if (voiceLabelEl2) voiceLabelEl2.textContent = blindMode ? VOICE_LABEL_BLIND : VOICE_LABEL_NORMAL;
 
             hideTitleScreen();
+            updatePvpLayout();
             initBoard();
             renderLabels();
             renderAll();
