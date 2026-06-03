@@ -6587,6 +6587,12 @@
 
     // 後手視点フリップ時のレイアウト調整
     function updatePvpLayout() {
+        console.log('[DEBUG] updatePvpLayout called', {
+            pvpMode,
+            myRole,
+            playerSide,
+            iAmSente: pvpMode ? (myRole === 'sente') : (playerSide !== 'gote')
+        });
         // 自分がsenteかどうか（PvP: myRole, CPU: playerSide で判定）
         const iAmSente = pvpMode ? (myRole === 'sente') : (playerSide !== 'gote');
 
