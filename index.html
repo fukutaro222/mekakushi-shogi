@@ -3305,7 +3305,7 @@
 
         <div class="board-section">
             <div class="player-row" id="gote-player-row">
-                <div class="player-tag" id="gote-label">後手（上手）</div>
+                <div class="player-tag" id="gote-label">後手</div>
                 <span class="clock-disp clock-hidden" id="gote-clock">10:00</span>
             </div>
 
@@ -3323,7 +3323,7 @@
             </div>
 
             <div class="player-row" id="sente-player-row">
-                <div class="player-tag" id="sente-label">先手（下手）</div>
+                <div class="player-tag" id="sente-label">先手</div>
                 <span class="clock-disp clock-hidden" id="sente-clock">10:00</span>
             </div>
         </div>
@@ -6323,6 +6323,7 @@
                                 roomId:       roomId });
                             pvpHideOverlay();
                             updatePvpLayout();
+                            clockEnabled = setupTime > 0;
                             initBoard(); renderLabels(); renderAll();
                             pvpSetDot('connected');
                             document.getElementById('pvp-btn')?.classList.add('pvp-active');
@@ -6591,8 +6592,8 @@
             const oppNick  = opponentNickname ?? '相手';
             const oppRating = opponentRating ?? null;
             if (flipped) {
-                if (gl) gl.innerHTML = buildPlayerTag('先手', oppNick, oppRating);
-                if (sl) sl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+                if (sl) sl.innerHTML = buildPlayerTag('先手', oppNick, oppRating);
             } else {
                 if (gl) gl.innerHTML = buildPlayerTag('後手', oppNick, oppRating);
                 if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
@@ -6601,8 +6602,8 @@
             const myNick   = currentUser?.nickname ?? 'あなた';
             const myRating = currentUser?.rating ?? null;
             if (flipped) {
-                if (gl) gl.innerHTML = buildPlayerTag('先手', 'CPU', null);
-                if (sl) sl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+                if (gl) gl.innerHTML = buildPlayerTag('後手', myNick, myRating);
+                if (sl) sl.innerHTML = buildPlayerTag('先手', 'CPU', null);
             } else {
                 if (gl) gl.innerHTML = buildPlayerTag('後手', 'CPU', null);
                 if (sl) sl.innerHTML = buildPlayerTag('先手', myNick, myRating);
@@ -6895,6 +6896,7 @@
             else speakText(`${mePrefix}${moveSpeech}`);
             resetByoyomiAfterMove(me);
             currentTurn = opp;
+            if (pvpMode && clockEnabled && !gameOver) startClock();
             renderAll();
             if (!pvpMode) triggerComputerMove();
             return;
@@ -7556,20 +7558,7 @@
                 location.reload();
             });
         } else {
-            el.innerHTML =
-                `<div class="gac-links">` +
-                    `<button class="gac-link" id="gac-register">新規登録</button>` +
-                    `<span class="gac-sep">|</span>` +
-                    `<button class="gac-link" id="gac-login">ログイン</button>` +
-                `</div>`;
-            document.getElementById('gac-login').addEventListener('click', () => {
-                document.getElementById('tab-login')?.click();
-                showAuthOverlay();
-            });
-            document.getElementById('gac-register').addEventListener('click', () => {
-                document.getElementById('tab-register')?.click();
-                showAuthOverlay();
-            });
+            el.innerHTML = '';
         }
     }
 
