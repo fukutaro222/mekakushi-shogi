@@ -4936,7 +4936,7 @@
         // 自分がsenteかを判定し、isMyTurn で自分／相手のクロックをハイライト
         const iAmSente   = pvpMode ? (myRole === 'sente') : true;
         const isMyTurn   = ((currentTurn === 'sente') === iAmSente) && !computerThinking && !gameOver;
-        const isOppTurn  = !isMyTurn && !computerThinking && !gameOver;
+        const isOppTurn  = !isMyTurn && !gameOver;
         const myClockEl  = iAmSente ? se : ge;   // 自分のクロック要素
         const oppClockEl = iAmSente ? ge : se;   // 相手のクロック要素
         myClockEl.classList.toggle('clock-active',  isMyTurn);
@@ -4958,7 +4958,7 @@
         if (!clockEnabled || gameOver) return;
         clockInterval = setInterval(() => {
             if (gameOver) { stopClock(); return; }
-            if (currentTurn === 'sente' && !computerThinking) {
+            if (currentTurn === 'sente') {
                 if (senteInByoyomi) {
                     senteByoyomiTime--;
                     if (senteByoyomiTime <= 0) { senteByoyomiTime = 0; stopClock(); onTimeout('sente'); return; }
@@ -4970,7 +4970,7 @@
                         else { stopClock(); onTimeout('sente'); return; }
                     }
                 }
-            } else if (currentTurn === 'gote' && !computerThinking) {
+            } else if (currentTurn === 'gote') {
                 if (goteInByoyomi) {
                     goteByoyomiTime--;
                     if (goteByoyomiTime <= 0) { goteByoyomiTime = 0; stopClock(); onTimeout('gote'); return; }
