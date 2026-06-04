@@ -6074,13 +6074,14 @@
                 peer = brdChallengePeer;
                 brdChallengePeer = null;
                 pvpSetupConn(c);
-                myRole = 'sente'; pvpMode = true;
+                const challengerIsSente = Math.random() < 0.5;
+                myRole = challengerIsSente ? 'sente' : 'gote'; pvpMode = true;
                 blindMode = boardBlindMode;
                 setupTime    = boardTimeLimit;
                 setupByoyomi = boardByoyomi;
                 clockEnabled = setupTime > 0;
                 c.send({
-                    type: 'welcome', role: 'gote',
+                    type: 'welcome', role: challengerIsSente ? 'gote' : 'sente',
                     hostNickname: currentUser?.nickname ?? null,
                     hostUserId:   currentUser?.id       ?? null,
                     hostRating:   currentUser?.rating   ?? 1500,
