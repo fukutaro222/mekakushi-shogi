@@ -8091,6 +8091,7 @@
         }
         clockEnabled = savedClock;
 
+        document.getElementById('resign-btn').style.display = 'none';
         rsSaveHistory(); // 初期状態を履歴に記録
         document.getElementById('research-bar').classList.add('active');
         renderLabels(); renderAll();
@@ -8103,6 +8104,7 @@
         rsContextCell     = null;
         hideContextMenu();
         document.getElementById('research-bar').classList.remove('active');
+        document.getElementById('resign-btn').style.display = '';
         showTitleScreen();
     }
 
