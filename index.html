@@ -5044,7 +5044,8 @@
             const loser  = myRole   === 'sente' ? '先手' : '後手';
             showEndGame(`${winner}の勝ちです！（${loser}投了）`, winnerRole, 'お疲れ様でした');
         } else {
-            showEndGame('後手の勝ちです！（先手投了）', 'gote', 'お疲れ様でした');
+            const cpuSide = playerSide === 'sente' ? 'gote' : 'sente';
+            showEndGame('', cpuSide, 'お疲れ様でした');
         }
     }
 
@@ -7418,12 +7419,13 @@
     // 勝者ロール ('sente'|'gote') に対して「自分が勝ったか」を返す
     function iWonAs(winnerRole) {
         if (pvpMode) return winnerRole === myRole;
-        return winnerRole === 'sente'; // CPU対局: 自分は先手
+        return winnerRole === playerSide;
     }
 
     // ゲーム終了演出（フラッシュ → 1.4秒後にオーバーレイ）
     function showEndGame(overlayText, winnerRole, speakOverride, moveSpeech) {
         const iWon = iWonAs(winnerRole);
+        if (!pvpMode) overlayText = iWon ? 'あなたの勝ちです！' : 'あなたの負けです';
         const resultMsg = iWon ? 'おめでとうございます' : 'お疲れ様でした';
         const winnerName = winnerRole === 'sente' ? '先手' : '後手';
 
@@ -7439,8 +7441,8 @@
         showFlashBanner(resultMsg, iWon ? 'win' : 'lose');
         document.getElementById('gameover-text').textContent = overlayText;
         document.getElementById('practice-note').style.display = pvpMode ? 'none' : 'block';
-        // 感想戦ボタン: 新形式棋譜が1手以上ある場合のみ表示
-        const canAnalyze = kifu.length > 0 && kifu[0] && typeof kifu[0].kind === 'string';
+        // 感想戦ボタン: PvP対局で新形式棋譜が1手以上ある場合のみ表示（CPU対局では非表示）
+        const canAnalyze = pvpMode && kifu.length > 0 && kifu[0] && typeof kifu[0].kind === 'string';
         document.getElementById('analyze-btn').style.display = canAnalyze ? '' : 'none';
         document.getElementById('analyze-btn').disabled = false;
         document.getElementById('analyze-request-area').textContent = '';
