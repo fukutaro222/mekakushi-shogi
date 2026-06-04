@@ -2267,6 +2267,18 @@
         #rs-end-btn:hover { background: #301828; }
 
         /* ── 棋譜インポートボタン ── */
+        #rs-reset-standard, #rs-reset-empty {
+            background: #182818;
+            color: #88d888;
+            border: 1px solid #2a6030;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        #rs-reset-standard:hover, #rs-reset-empty:hover { background: #223822; }
         #an-import, #rs-import {
             background: #1a3020;
             color: #80d080;
@@ -3277,6 +3289,8 @@
             <button id="rs-undo-btn">◁ 戻る</button>
             <button id="rs-redo-btn">進む ▷</button>
         </div>
+        <button id="rs-reset-standard">♟ 初期配置</button>
+        <button id="rs-reset-empty">□ 駒なし</button>
         <button id="rs-save-btn">局面を保存</button>
         <button id="rs-import">棋譜インポート</button>
         <button id="rs-end-btn">✕ 終了</button>
@@ -3961,7 +3975,6 @@
         function showSetupPanel() {
             document.getElementById('title-content').classList.add('hidden');
             document.getElementById('setup-panel').classList.remove('hidden');
-            showBackBtn(hideSetupPanel);
         }
         function hideSetupPanel() {
             document.getElementById('setup-panel').classList.add('hidden');
@@ -4147,6 +4160,8 @@
         });
         document.getElementById('rs-undo-btn').addEventListener('click', researchUndo);
         document.getElementById('rs-redo-btn').addEventListener('click', researchRedo);
+        document.getElementById('rs-reset-standard').addEventListener('click', () => { if (researchMode) startResearch('standard'); });
+        document.getElementById('rs-reset-empty').addEventListener('click',    () => { if (researchMode) startResearch('empty'); });
         document.getElementById('rs-save-btn').addEventListener('click', rsSavePosition);
         document.getElementById('rs-end-btn').addEventListener('click', stopResearch);
 
@@ -5310,7 +5325,6 @@
     function showMatchmakingPanel() {
         document.getElementById('title-content').classList.add('hidden');
         document.getElementById('mm-panel').classList.remove('hidden');
-        showBackBtn(hideMatchmakingPanel);
     }
     function hideMatchmakingPanel() {
         document.getElementById('mm-panel').classList.add('hidden');
@@ -5749,7 +5763,6 @@
         brdUnsubscribeDetail();
         brdLoadList();
         if (!brdListChannel) brdSubscribeList();
-        showBackBtn(hideBoardPanel);
     }
 
     function brdSubscribeList() {
@@ -5840,7 +5853,6 @@
     function brdGoNew() {
         if (!currentUser) { showToast('ログインが必要です'); return; }
         brdSwitchView('new');
-        showBackBtn(brdGoList);
         document.getElementById('brd-title-input').value = '';
         document.getElementById('brd-content-input').value = '';
         document.getElementById('brd-title-count').textContent = '0 / 30';
@@ -5871,7 +5883,6 @@
 
     async function brdGoDetail(threadId) {
         brdSwitchView('detail');
-        showBackBtn(brdGoList);
         brdUnsubscribeDetail();
         brdThreadId = threadId;
         document.getElementById('brd-replies-list').innerHTML = '<div class="brd-empty">読み込み中...</div>';
@@ -7776,6 +7787,7 @@
 
     async function loadAndStartReplay(gameId) {
         hideKifuHistory();
+        hideTitleScreen();
         const { data, error } = await sb.from('games').select('kifu').eq('id', gameId).single();
         if (error || !data) { alert('棋譜の読み込みに失敗しました'); return; }
         startReplay(data.kifu);
@@ -7887,6 +7899,7 @@
         initBoard();
         clockEnabled = savedClock;
         renderAll();
+        showTitleScreen();
     }
 
     // ── 感想戦 ───────────────────────────────────────────────────────────────
