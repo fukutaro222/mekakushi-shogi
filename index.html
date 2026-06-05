@@ -4250,6 +4250,9 @@
     }
 
     // ── 定数 ──────────────────────────────────────────────────────────────────
+    const ADMIN_USER_ID = '87d3ff7f-c234-4cc2-85a2-cec673682b98';
+    function isAdmin() { return currentUser?.id === ADMIN_USER_ID; }
+
     const KANJI = {
         pawn: '歩', lance: '香', knight: '桂',
         silver: '銀', gold: '金', bishop: '角', rook: '飛',
@@ -5216,6 +5219,14 @@
             hideModeToggles();
             if (clockEnabled && !gameOver) startClock();
             showToast('再接続しました。対局を再開します');
+        } else if (data.type === 'blind_sync') {
+            // 管理者から目隠しモード変更を受信
+            blindMode    = data.blindMode;
+            namedlessMode = data.namedlessMode ?? blindMode;
+            selected = null; legalMoves = [];
+            updateModeToggles();
+            renderAll();
+            showToast(blindMode ? '目隠し：ON' : '目隠し：OFF（管理者が変更）');
         } else if (data.type === 'watch_state') {
             // 観戦者として受信: 盤面を更新
             applyWatchState(data);
@@ -9406,7 +9417,13 @@
     // トグルを非表示にしてモードをリセット
     function hideModeToggles() {
         document.getElementById('nameless-toggle').style.display = 'none';
-        document.getElementById('blind-toggle').style.display    = 'none';
+        // 管理者はPvP中も目隠しトグルを操作できる
+        if (pvpMode && isAdmin()) {
+            document.getElementById('blind-toggle').style.display = '';
+            updateModeToggles();
+        } else {
+            document.getElementById('blind-toggle').style.display = 'none';
+        }
     }
 
     // 「もう一度」ボタン
@@ -9535,13 +9552,18 @@
 
     // 目隠しトグル
     document.getElementById('blind-toggle')?.addEventListener('click', () => {
-        if (pvpMode) return;
+        if (pvpMode && !isAdmin()) return; // 管理者以外はPvP中操作不可
         blindMode = !blindMode;
-        if (blindMode) namedlessMode = true; // 目隠しON → 駒名なしも強制ON
+        if (blindMode) namedlessMode = true;  // 目隠しON → 駒名なしも強制ON
+        else           namedlessMode = false; // 目隠しOFF → 駒名なしも解除
         selected = null; legalMoves = [];
         updateModeToggles();
         renderAll();
         if (blindMode) speakText('目隠しモードをオンにしました。音声または入力欄で指し手を入力してください。');
+        // 管理者がPvP中に切り替えたら相手にも同期
+        if (pvpMode && isAdmin()) {
+            pvpSend({ type: 'blind_sync', blindMode, namedlessMode });
+        }
     });
 
     document.getElementById('chat-btn')?.addEventListener('click', e => {
