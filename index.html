@@ -1588,7 +1588,7 @@
             transition: background 0.15s, color 0.15s;
         }
         .auth-tab.active { background: #2e1406; color: #f0ddb0; }
-        #auth-email, #auth-password, #reset-email, #newpass-input, #newpass-confirm {
+        #auth-nickname, #auth-password {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #c8a878;
@@ -1598,12 +1598,12 @@
             font-family: inherit;
             outline: none;
         }
-        #auth-email:focus, #auth-password:focus, #reset-email:focus, #newpass-input:focus, #newpass-confirm:focus {
+        #auth-nickname:focus, #auth-password:focus {
             border-color: #8b5a1a;
             box-shadow: 0 0 0 2px rgba(139,90,26,0.2);
         }
-        #auth-error, #reset-msg, #newpass-msg { font-size: 13px; color: #c0392b; min-height: 18px; text-align: center; }
-        #auth-submit, #reset-send-btn, #newpass-submit-btn {
+        #auth-error { font-size: 13px; color: #c0392b; min-height: 18px; text-align: center; }
+        #auth-submit {
             width: 100%;
             padding: 11px;
             background: #2e1406;
@@ -1616,11 +1616,10 @@
             letter-spacing: 2px;
             transition: background 0.15s;
         }
-        #auth-submit:hover, #reset-send-btn:hover, #newpass-submit-btn:hover { background: #5a3818; }
-        #auth-submit:disabled, #reset-send-btn:disabled, #newpass-submit-btn:disabled { background: #999; cursor: default; }
+        #auth-submit:hover { background: #5a3818; }
+        #auth-submit:disabled { background: #999; cursor: default; }
 
-        /* ── パスワードリセット ── */
-        #auth-view-main, #auth-view-reset, #auth-view-newpass {
+        #auth-view-main {
             display: flex; flex-direction: column; gap: 14px;
         }
         .auth-link {
@@ -3187,30 +3186,10 @@
                     <button class="auth-tab active" id="tab-login">ログイン</button>
                     <button class="auth-tab" id="tab-register">新規登録</button>
                 </div>
-                <input type="email" id="auth-email" placeholder="メールアドレス" autocomplete="email">
+                <input type="text" id="auth-nickname" placeholder="ニックネーム" autocomplete="username">
                 <input type="password" id="auth-password" placeholder="パスワード（6文字以上）" autocomplete="current-password">
                 <div id="auth-error"></div>
                 <button id="auth-submit">ログイン</button>
-                <button class="auth-link" id="auth-forgot-link">パスワードをお忘れの方はこちら</button>
-            </div>
-
-            <!-- View 2: パスワードリセット -->
-            <div id="auth-view-reset" style="display:none">
-                <p class="auth-view-title">パスワードリセット</p>
-                <p class="auth-view-desc">登録したメールアドレスを入力してください。<br>パスワードリセット用のリンクをお送りします。</p>
-                <input type="email" id="reset-email" placeholder="メールアドレス" autocomplete="email">
-                <div id="reset-msg"></div>
-                <button id="reset-send-btn">リセットメールを送信</button>
-                <button class="auth-link" id="reset-back-link">← 戻る</button>
-            </div>
-
-            <!-- View 3: パスワード再設定（リセットメールのリンクから遷移） -->
-            <div id="auth-view-newpass" style="display:none">
-                <p class="auth-view-title">新しいパスワードを設定</p>
-                <input type="password" id="newpass-input" placeholder="新しいパスワード（6文字以上）" autocomplete="new-password">
-                <input type="password" id="newpass-confirm" placeholder="パスワード（確認）" autocomplete="new-password">
-                <div id="newpass-msg"></div>
-                <button id="newpass-submit-btn">パスワードを更新</button>
             </div>
         </div>
     </div>
@@ -3513,15 +3492,7 @@
         // onAuthStateChange: ログイン・ログアウト・パスワードリセットを検知
         sb.auth.onAuthStateChange(async (event, session) => {
             console.log('[Auth] onAuthStateChange:', event);
-            if (event === 'PASSWORD_RECOVERY') {
-                document.getElementById('newpass-input').value = '';
-                document.getElementById('newpass-confirm').value = '';
-                document.getElementById('newpass-msg').textContent = '';
-                document.getElementById('newpass-submit-btn').disabled = false;
-                ['main','reset'].forEach(v => { document.getElementById(`auth-view-${v}`).style.display = 'none'; });
-                document.getElementById('auth-view-newpass').style.display = 'flex';
-                showAuthOverlay();
-            } else if (event === 'SIGNED_IN' && session && !currentUser) {
+            if (event === 'SIGNED_IN' && session && !currentUser) {
                 await onAuthSuccess(session);
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
@@ -3629,7 +3600,17 @@
 
     const PROFILE_DEFAULT = { nickname: null, rating: 1200, rank: '3級', rank_achievement: 0 };
 
-    async function fetchOrCreateProfile(userId) {
+    let _pendingNickname = sessionStorage.getItem('_pendingNickname') ?? null;
+    if (_pendingNickname) sessionStorage.removeItem('_pendingNickname');
+
+    async function nicknameToEmail(nickname) {
+        const data = new TextEncoder().encode(nickname.toLowerCase().trim());
+        const hash = await crypto.subtle.digest('SHA-256', data);
+        const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+        return `u${hex}@mekakushi-shogi.app`;
+    }
+
+    async function fetchOrCreateProfile(userId, initialNickname = null) {
         console.log('[Profile] 取得開始:', userId);
         const { data, error } = await sb
             .from('profiles')
@@ -3643,10 +3624,11 @@
         // 行が存在しない → 新規作成
         if (error.code === 'PGRST116' || error.code === '406') {
             console.log('[Profile] 新規作成中...');
-            const { error: ie } = await sb.from('profiles')
-                .insert({ id: userId, ...PROFILE_DEFAULT });
+            const insertData = { id: userId, ...PROFILE_DEFAULT };
+            if (initialNickname) insertData.nickname = initialNickname;
+            const { error: ie } = await sb.from('profiles').insert(insertData);
             if (ie) console.warn('[Profile] 作成エラー (無視):', ie.code, ie.message);
-            return PROFILE_DEFAULT;
+            return { ...PROFILE_DEFAULT, nickname: initialNickname ?? null };
         }
 
         // RLS違反・その他エラーはデフォルト値で続行
@@ -3675,8 +3657,10 @@
         console.log('[Auth] 画面遷移完了（profile取得はバックグラウンドで継続）');
 
         // ③ profilesをバックグラウンドで取得してUIを更新（遷移はブロックしない）
+        const _nick = _pendingNickname;
+        _pendingNickname = null;
         if (sb) {
-            fetchOrCreateProfile(user.id).then(profile => {
+            fetchOrCreateProfile(user.id, _nick).then(profile => {
                 console.log('[Auth] バックグラウンドプロファイル取得成功:', profile);
                 currentUser.nickname       = profile.nickname;
                 currentUser.rating         = profile.rating        ?? 1200;
@@ -3687,7 +3671,7 @@
                 if (!currentUser.nickname) showNicknameModal(true);
             }).catch(e => {
                 console.warn('[Auth] バックグラウンドプロファイル取得失敗:', e.message);
-                showNicknameModal(true);
+                if (!currentUser.nickname) showNicknameModal(true);
             });
         } else {
             showNicknameModal(true);
@@ -3751,13 +3735,13 @@
         if (!msg) return 'ログインに失敗しました。再度お試しください';
         const m = msg.toLowerCase();
         if (m.includes('invalid login credentials') || m.includes('invalid credentials') || m.includes('wrong password'))
-            return 'メールアドレスまたはパスワードが間違っています';
+            return 'ニックネームまたはパスワードが間違っています';
         if (m.includes('email not confirmed') || m.includes('email not verified'))
-            return 'メールアドレスの確認が完了していません';
+            return 'アカウントの確認が完了していません';
         if (m.includes('too many requests') || m.includes('rate limit') || m.includes('over_email_send_rate_limit'))
             return 'しばらく時間をおいてから再度お試しください';
         if (m.includes('user already registered') || m.includes('already registered') || m.includes('user already exists'))
-            return 'このメールアドレスはすでに登録されています';
+            return 'このニックネームはすでに使用されています';
         if (m.includes('password should be at least') || m.includes('weak password') || m.includes('password must be'))
             return 'パスワードは6文字以上で入力してください';
         if (m.includes('signup is disabled') || m.includes('email signups are disabled'))
@@ -3770,19 +3754,6 @@
     }
 
     function initAuthUI() {
-        // URLハッシュにtype=recoveryが含まれる場合はパスワード再設定画面を表示
-        const _hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        if (_hashParams.get('type') === 'recovery') {
-            document.getElementById('auth-view-main').style.display = 'none';
-            document.getElementById('auth-view-reset').style.display = 'none';
-            document.getElementById('auth-view-newpass').style.display = 'flex';
-            document.getElementById('newpass-input').value = '';
-            document.getElementById('newpass-confirm').value = '';
-            document.getElementById('newpass-msg').textContent = '';
-            document.getElementById('newpass-submit-btn').disabled = false;
-            showAuthOverlay();
-        }
-
         // 初期化時点でボタンを確実に有効化
         document.getElementById('auth-submit').disabled = false;
 
@@ -3791,13 +3762,7 @@
 
         // ── 認証オーバーレイ内の戻るボタン ──────────────────────────────────────
         document.getElementById('auth-back-btn').addEventListener('click', () => {
-            if (authIsLogin) {
-                // ログイン画面: オーバーレイを閉じてタイトルへ
-                hideAuthOverlay();
-            } else {
-                // 新規登録画面: ログインタブへ戻る
-                document.getElementById('tab-login').click();
-            }
+            hideAuthOverlay();
         });
 
         // タブ切替
@@ -3818,17 +3783,25 @@
 
         // フォーム送信 — onclick で既存リスナーをすべて上書き
         document.getElementById('auth-submit').onclick = async function() {
-            const email    = document.getElementById('auth-email').value.trim();
+            const nickname = document.getElementById('auth-nickname').value.trim();
             const password = document.getElementById('auth-password').value;
             const errEl    = document.getElementById('auth-error');
 
             errEl.textContent = '';
-            console.log('ログイン開始', email);
-            console.log('sb:', sb, 'sb.auth:', sb?.auth);
 
-            if (!email || !password) {
+            if (!nickname || !password) {
                 errEl.style.color = '#c0392b';
-                errEl.textContent = 'メールアドレスとパスワードを入力してください';
+                errEl.textContent = 'ニックネームとパスワードを入力してください';
+                return;
+            }
+            if (nickname.length > 16) {
+                errEl.style.color = '#c0392b';
+                errEl.textContent = 'ニックネームは16文字以内で入力してください';
+                return;
+            }
+            if (password.length < 6) {
+                errEl.style.color = '#c0392b';
+                errEl.textContent = 'パスワードは6文字以上で入力してください';
                 return;
             }
             if (!sb || !sb.auth) {
@@ -3838,21 +3811,34 @@
             }
 
             this.disabled = true;
-            this.textContent = 'ログイン中...';
+            this.textContent = authIsLogin ? 'ログイン中...' : '登録中...';
 
             try {
-                console.log('signInWithPassword 呼び出し中...');
-                const result = await sb.auth.signInWithPassword({ email, password });
-                console.log('結果:', JSON.stringify({ error: result.error?.message, hasSession: !!result.data?.session }));
+                const email = await nicknameToEmail(nickname);
 
-                if (result.error) {
-                    errEl.style.color = '#c0392b';
-                    errEl.textContent = translateAuthError(result.error.message);
-                    return;
+                if (authIsLogin) {
+                    const result = await sb.auth.signInWithPassword({ email, password });
+                    if (result.error) {
+                        errEl.style.color = '#c0392b';
+                        errEl.textContent = translateAuthError(result.error.message);
+                        return;
+                    }
+                    window.location.href = '/';
+                } else {
+                    const result = await sb.auth.signUp({ email, password });
+                    if (result.error) {
+                        errEl.style.color = '#c0392b';
+                        errEl.textContent = translateAuthError(result.error.message);
+                        return;
+                    }
+                    if (!result.data?.session) {
+                        errEl.style.color = '#c0392b';
+                        errEl.textContent = '登録に失敗しました。しばらくしてから再度お試しください。';
+                        return;
+                    }
+                    sessionStorage.setItem('_pendingNickname', nickname);
+                    window.location.href = '/';
                 }
-
-                console.log('成功！トップページへ遷移します');
-                window.location.href = '/';
 
             } catch(e) {
                 console.error('例外:', e);
@@ -3860,91 +3846,15 @@
                 errEl.textContent = '例外エラー: ' + (e.message ?? e);
             } finally {
                 this.disabled = false;
-                this.textContent = 'ログイン';
+                this.textContent = authIsLogin ? 'ログイン' : '新規登録';
             }
         };
 
         // Enterキーでも送信
-        document.getElementById('auth-email').onkeydown    =
+        document.getElementById('auth-nickname').onkeydown =
         document.getElementById('auth-password').onkeydown = function(e) {
             if (e.key === 'Enter') document.getElementById('auth-submit').click();
         };
-
-        // ── パスワードリセット ────────────────────────────────────────────
-        const showAuthView = (view) => {
-            ['main','reset','newpass'].forEach(v => {
-                document.getElementById(`auth-view-${v}`).style.display = v === view ? 'flex' : 'none';
-            });
-        };
-
-        // ログイン/登録タブ切替時にリンク表示を制御
-        const forgotLink = document.getElementById('auth-forgot-link');
-        document.getElementById('tab-login').addEventListener('click', () => {
-            if (forgotLink) forgotLink.style.display = '';
-        });
-        document.getElementById('tab-register').addEventListener('click', () => {
-            if (forgotLink) forgotLink.style.display = 'none';
-        });
-
-        // 「パスワードをお忘れの方」リンク
-        forgotLink?.addEventListener('click', () => {
-            document.getElementById('reset-email').value = '';
-            document.getElementById('reset-msg').textContent = '';
-            document.getElementById('reset-msg').style.color = '#c0392b';
-            document.getElementById('reset-send-btn').style.display = '';
-            document.getElementById('reset-back-link').textContent = '← 戻る';
-            showAuthView('reset');
-        });
-
-        // 戻るリンク
-        document.getElementById('reset-back-link')?.addEventListener('click', () => {
-            showAuthView('main');
-        });
-
-        // リセットメール送信
-        document.getElementById('reset-send-btn')?.addEventListener('click', async () => {
-            const email = document.getElementById('reset-email').value.trim();
-            const msgEl = document.getElementById('reset-msg');
-            const btn   = document.getElementById('reset-send-btn');
-            msgEl.style.color = '#c0392b';
-            msgEl.textContent = '';
-            if (!email) { msgEl.textContent = 'メールアドレスを入力してください'; return; }
-            if (!sb) { msgEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。'; return; }
-            btn.disabled = true;
-            const { error } = await sb.auth.resetPasswordForEmail(email, {
-                redirectTo: 'https://mekakushi-shogi.vercel.app'
-            });
-            btn.disabled = false;
-            if (error) { msgEl.textContent = translateAuthError(error.message); return; }
-            msgEl.style.color = '#2a7a2a';
-            msgEl.textContent = 'パスワードリセット用のメールを送信しました。メールをご確認ください。';
-            btn.style.display = 'none';
-            document.getElementById('reset-back-link').textContent = 'ログイン画面へ戻る';
-        });
-
-        // パスワード再設定（リセットメールのリンクから遷移後）
-        document.getElementById('newpass-submit-btn')?.addEventListener('click', async () => {
-            const pass  = document.getElementById('newpass-input').value;
-            const conf  = document.getElementById('newpass-confirm').value;
-            const msgEl = document.getElementById('newpass-msg');
-            const btn   = document.getElementById('newpass-submit-btn');
-            msgEl.style.color = '#c0392b';
-            msgEl.textContent = '';
-            if (!pass || !conf)    { msgEl.textContent = 'パスワードを入力してください'; return; }
-            if (pass.length < 6)   { msgEl.textContent = 'パスワードは6文字以上で入力してください'; return; }
-            if (pass !== conf)     { msgEl.textContent = 'パスワードが一致しません'; return; }
-            if (!sb) { msgEl.textContent = '認証サービスに接続できません。ページを再読み込みしてください。'; return; }
-            btn.disabled = true;
-            const { error } = await sb.auth.updateUser({ password: pass });
-            btn.disabled = false;
-            if (error) { msgEl.textContent = translateAuthError(error.message); return; }
-            msgEl.style.color = '#2a7a2a';
-            msgEl.textContent = 'パスワードを変更しました。ログインしてください';
-            setTimeout(() => {
-                showAuthView('main');
-                document.getElementById('tab-login').click();
-            }, 2000);
-        });
 
         // ログアウト（user-barから削除済み、他の箇所から呼ばれる場合のため関数として残す）
         document.getElementById('logout-btn')?.addEventListener('click', async () => {
@@ -3953,7 +3863,7 @@
             if (sb) await sb.auth.signOut();
             currentUser = null;
             document.getElementById('user-bar').classList.remove('visible');
-            document.getElementById('auth-email').value = '';
+            document.getElementById('auth-nickname').value = '';
             document.getElementById('auth-password').value = '';
             document.getElementById('auth-error').textContent = '';
             showTitleScreen();
