@@ -3525,6 +3525,7 @@
                 await onAuthSuccess(session);
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
+                updateTitleAuth();
             }
         });
 
@@ -7699,7 +7700,20 @@
                 location.reload();
             });
         } else {
-            el.innerHTML = '';
+            el.innerHTML =
+                `<div class="gac-links">` +
+                    `<button class="gac-link" id="gac-login-btn">ログイン</button>` +
+                    `<span class="gac-sep">|</span>` +
+                    `<button class="gac-link" id="gac-register-btn">新規登録</button>` +
+                `</div>`;
+            document.getElementById('gac-login-btn').addEventListener('click', () => {
+                document.getElementById('tab-login')?.click();
+                showAuthOverlay();
+            });
+            document.getElementById('gac-register-btn').addEventListener('click', () => {
+                document.getElementById('tab-register')?.click();
+                showAuthOverlay();
+            });
         }
     }
 
