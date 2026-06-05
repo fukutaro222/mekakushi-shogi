@@ -54,13 +54,15 @@
         .sente-hand-wrapper {
             display: flex;
             flex-direction: column;
-            justify-content: flex-end;
+            justify-content: flex-start;
+            order: 1;
         }
 
         .gote-hand-wrapper {
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
+            justify-content: flex-end;
+            order: 3;
         }
 
         .board-section {
@@ -68,6 +70,7 @@
             flex-direction: column;
             align-items: center;
             gap: 8px;
+            order: 2;
         }
         /* 後手視点：上下を反転（!importantでinline styleより確実に優先） */
         .board-section.gote-pov {
@@ -940,6 +943,7 @@
             flex-direction: column;
             justify-content: flex-start;
             align-self: stretch;
+            order: 4;
         }
         .kifu-panel {
             background: #d4a84a;
@@ -1499,9 +1503,9 @@
                 align-items: center;
                 gap: 10px;
             }
-            .gote-hand-wrapper  { order: 1; width: min(100%, 560px); }
+            .sente-hand-wrapper { order: 1; width: min(100%, 560px); }
             .board-section      { order: 2; }
-            .sente-hand-wrapper { order: 3; width: min(100%, 560px); }
+            .gote-hand-wrapper  { order: 3; width: min(100%, 560px); }
             .kifu-wrapper       { order: 4; width: min(100%, 560px); }
             .hand { min-height: auto; width: 100%; }
             .kifu-panel { max-height: 80px; width: 100%; }
@@ -6632,17 +6636,6 @@
             if (goteRow)      goteRow.style.order      = '';
         }
 
-        // モバイル縦並びの持ち駒エリアも入れ替え
-        const gh = document.querySelector('.gote-hand-wrapper');
-        const sh = document.querySelector('.sente-hand-wrapper');
-        if (gh) gh.style.order = !iAmSente ? '3' : '';
-        if (sh) sh.style.order = !iAmSente ? '1' : '';
-        // デスクトップ横並び: justify-contentで上下位置を切り替え
-        // 先手視点: 後手(相手)=上(flex-start), 先手(自分)=下(flex-end)
-        // 後手視点: 先手(相手)=上(flex-start), 後手(自分)=下(flex-end)
-        if (gh) gh.style.justifyContent = !iAmSente ? 'flex-end' : 'flex-start';
-        if (sh) sh.style.justifyContent = !iAmSente ? 'flex-start' : 'flex-end';
-
         // ラベル: gote-label は DOM上は「後手row」に属する
         // iAmSente=true:  gote-row=上 → topRole(後手=相手), sente-row=下 → bottomRole(先手=自分)
         // iAmSente=false: gote-row=下(order:3) → bottomRole(後手=自分), sente-row=上(order:1) → topRole(先手=相手)
@@ -7346,11 +7339,12 @@
         handEl?.classList.remove('hidden-hand');
         const order = ['rook','bishop','gold','silver','knight','lance','pawn'];
 
+        const _flippedHand = (!pvpMode && playerSide === 'gote') || (pvpMode && myRole === 'gote');
         if (researchMode) {
             // 研究モード: 全駒種を表示 + ±ボタン
             for (const type of order) {
                 const cnt = hand[type] ?? 0;
-                const isGoteHand = player === 'gote';
+                const isGoteHand = _flippedHand ? (player === 'sente') : (player === 'gote');
                 const handSeed = type.charCodeAt(0) + (isGoteHand ? 50 : 0);
                 const row = document.createElement('div');
                 row.className = 'research-hand-ctrl';
@@ -7396,7 +7390,7 @@
             const isSelected = selected?.kind === 'hand' && selected.type === type && currentTurn === player;
             const item = document.createElement('div');
             item.className = 'hand-piece-item' + (isSelected ? ' selected-hand' : '');
-            const isGoteHand = player === 'gote';
+            const isGoteHand = _flippedHand ? (player === 'sente') : (player === 'gote');
             const handSeed = type.charCodeAt(0) + (isGoteHand ? 50 : 0);
             item.appendChild(makePieceSVG(type, false, isGoteHand, handSeed, isSelected));
             if (cnt > 1) {
