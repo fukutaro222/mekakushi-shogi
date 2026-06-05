@@ -4300,6 +4300,7 @@
     let blindMode    = false;
     let namedlessMode = false;
     let gameOver     = false;
+    let lastWinnerRole = null; // 観戦者へ終局情報を伝えるためのキャッシュ
     let inCheck   = false; // 現在の手番側が王手を受けているか
     let kifu      = [];    // 棋譜エントリ文字列配列
     let lastMovePromoted = false; // 直前の手で成ったか
@@ -4422,7 +4423,7 @@
         board[7][7] = { type: 'rook',   player: 'sente', promoted: false }; // 2八 飛
         senteHand = {}; goteHand = {};
         currentTurn = 'sente'; selected = null; legalMoves = []; computerThinking = false;
-        lastMoveDest = null; gameOver = false; inCheck = false; kifu = [];
+        lastMoveDest = null; gameOver = false; lastWinnerRole = null; inCheck = false; kifu = [];
         senteTime = setupTime; goteTime = setupTime;
         senteInByoyomi = false; goteInByoyomi = false;
         senteByoyomiTime = setupByoyomi; goteByoyomiTime = setupByoyomi;
@@ -6400,6 +6401,7 @@
         hideTitleScreen();
         document.getElementById('watch-badge').classList.add('visible');
         document.getElementById('rematch-btn').style.display = 'none';
+        updatePvpLayout(); // 先手視点で固定表示（pvpMode=false, playerSide='sente'）
         pvpShowOverlay('観戦接続中...', null);
         pvpSetDot('waiting');
         peer = new Peer({ debug: 0 });
@@ -6472,11 +6474,16 @@
             goteHand:  { ...goteHand },
             currentTurn,
             gameOver,
+            winnerRole:      lastWinnerRole,
             kifu: [...kifu],
             lastMoveDest: lastMoveDest ? { ...lastMoveDest } : null,
             inCheck,
             senteNick,
             goteNick,
+            clockEnabled,
+            senteTime,        goteTime,
+            senteInByoyomi,   goteInByoyomi,
+            senteByoyomiTime, goteByoyomiTime,
         };
     }
 
@@ -6495,6 +6502,20 @@
         kifu         = data.kifu ?? [];
         lastMoveDest = data.lastMoveDest ?? null;
         inCheck      = data.inCheck ?? false;
+
+        // クロック情報を反映
+        if (data.clockEnabled !== undefined) clockEnabled = data.clockEnabled;
+        if (data.senteTime        !== undefined) senteTime        = data.senteTime;
+        if (data.goteTime         !== undefined) goteTime         = data.goteTime;
+        if (data.senteInByoyomi   !== undefined) senteInByoyomi   = data.senteInByoyomi;
+        if (data.goteInByoyomi    !== undefined) goteInByoyomi    = data.goteInByoyomi;
+        if (data.senteByoyomiTime !== undefined) senteByoyomiTime = data.senteByoyomiTime;
+        if (data.goteByoyomiTime  !== undefined) goteByoyomiTime  = data.goteByoyomiTime;
+
+        // レイアウトを先手視点で設定（updatePvpLayout は pvpMode=false 時に先手視点になる）
+        updatePvpLayout();
+
+        // プレイヤーラベルをホストから受け取った名前で上書き
         if (data.senteNick) {
             const el = document.getElementById('sente-label');
             if (el) el.innerHTML = buildPlayerTag('先手', data.senteNick, null);
@@ -6503,11 +6524,16 @@
             const el = document.getElementById('gote-label');
             if (el) el.innerHTML = buildPlayerTag('後手', data.goteNick, null);
         }
-        renderAll();
+
+        renderAll(); // renderClock() も内部で呼ばれる
+
         if (data.gameOver) {
-            document.getElementById('gameover-text').textContent = '対局が終了しました';
+            const winner = data.winnerRole === 'sente' ? '先手' : data.winnerRole === 'gote' ? '後手' : null;
+            document.getElementById('gameover-text').textContent =
+                winner ? `${winner}の勝ちです！` : '対局が終了しました';
             document.getElementById('practice-note').style.display = 'none';
             document.getElementById('rematch-btn').style.display = 'none';
+            document.getElementById('analyze-btn').style.display = 'none';
             setTimeout(() => {
                 document.getElementById('gameover-overlay').style.display = 'flex';
             }, 500);
@@ -7452,6 +7478,7 @@
         }, 1400);
         const base = speakOverride ?? `${winnerName}の勝ちです。${resultMsg}`;
         speakText(moveSpeech ? `${moveSpeech}。${base}` : base);
+        lastWinnerRole = winnerRole;
         broadcastToWatchers();
         // 棋譜・レーティングをSupabaseに保存
         if (currentUser && winnerRole) saveGame(winnerRole).catch(console.error);
