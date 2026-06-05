@@ -7050,7 +7050,7 @@
     function renderTurnIndicator() {
         const el = document.getElementById('turn-indicator');
         if (computerThinking) {
-            el.textContent = wasmReady ? '後手（やねうら王 思考中…）' : '後手（考え中…）';
+            el.textContent = '後手（AI 思考中…）';
         } else {
             el.textContent = currentTurn === 'sente' ? '先手番' : '後手番';
         }
