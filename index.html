@@ -451,6 +451,21 @@
             box-shadow: 0 2px 6px rgba(0,0,0,0.35);
         }
 
+        /* ── 盤反転ボタン ── */
+        #flip-btn {
+            background: #1a2e1a;
+            color: #90b090;
+            border: 2px solid #2a4a2a;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-family: inherit;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        #flip-btn:hover { background: #2a4a2a; color: #c0e0c0; }
+
         /* ── 目隠しモードボタン ── */
         #nameless-toggle, #blind-toggle {
             background: #2e1406;
@@ -3262,6 +3277,7 @@
         <button id="resign-btn">投了</button>
         <button id="nameless-toggle" style="display:none">駒名なし：OFF</button>
         <button id="blind-toggle" style="display:none">目隠し：OFF</button>
+        <button id="flip-btn">盤反転</button>
         <button id="home-btn">⌂ トップ</button>
         <button id="chat-btn" style="display:none">💬 チャット</button>
     </div>
@@ -4300,6 +4316,7 @@
     let legalMoves = [];   // [[r, c], ...]
     let computerThinking = false;
     let lastMoveDest = null; // 直前の移動先 { r, c }（「同」判定用）
+    let viewFlipped  = false; // 盤反転ボタンによる追加フリップ
     let blindMode    = false;
     let namedlessMode = false;
     let gameOver     = false;
@@ -4427,6 +4444,7 @@
         senteHand = {}; goteHand = {};
         currentTurn = 'sente'; selected = null; legalMoves = []; computerThinking = false;
         lastMoveDest = null; gameOver = false; lastWinnerRole = null; inCheck = false; kifu = [];
+        viewFlipped = false;
         senteTime = setupTime; goteTime = setupTime;
         senteInByoyomi = false; goteInByoyomi = false;
         senteByoyomiTime = setupByoyomi; goteByoyomiTime = setupByoyomi;
@@ -6650,7 +6668,8 @@
             iAmSente: pvpMode ? (myRole === 'sente') : (playerSide !== 'gote')
         });
         // 自分がsenteかどうか（PvP: myRole, CPU: playerSide で判定）
-        const iAmSente = pvpMode ? (myRole === 'sente') : (playerSide !== 'gote');
+        const baseIAmSente = pvpMode ? (myRole === 'sente') : (playerSide !== 'gote');
+        const iAmSente = viewFlipped ? !baseIAmSente : baseIAmSente;
 
         // 上側（奥）= 相手、下側（手前）= 自分
         const topRole    = iAmSente ? '後手' : '先手';  // 上=相手の役割
@@ -7113,6 +7132,8 @@
         renderCheckBanner();
         renderKifu();
         renderClock();
+        const flipBtn = document.getElementById('flip-btn');
+        if (flipBtn) flipBtn.style.display = (pvpMode || watchMode) ? 'none' : '';
     }
 
     function renderTurnIndicator() {
@@ -7282,7 +7303,7 @@
     function renderBoard() {
         const tbl = document.getElementById('shogi-board');
         tbl.innerHTML = '';
-        const flipped = (pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote');
+        const flipped = ((pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote')) !== viewFlipped;
         for (let vr = 0; vr < 9; vr++) {
             const r = flipped ? 8 - vr : vr;
             const tr = document.createElement('tr');
@@ -7341,7 +7362,7 @@
     }
 
     function renderLabels() {
-        const flipped = (pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote');
+        const flipped = ((pvpMode && myRole === 'gote') || (!pvpMode && playerSide === 'gote')) !== viewFlipped;
         const colDiv = document.getElementById('col-nums');
         colDiv.innerHTML = '';
         const cols = flipped ? [1,2,3,4,5,6,7,8,9] : [9,8,7,6,5,4,3,2,1];
@@ -7376,7 +7397,7 @@
         handEl?.classList.remove('hidden-hand');
         const order = ['rook','bishop','gold','silver','knight','lance','pawn'];
 
-        const _flippedHand = (!pvpMode && playerSide === 'gote') || (pvpMode && myRole === 'gote');
+        const _flippedHand = ((!pvpMode && playerSide === 'gote') || (pvpMode && myRole === 'gote')) !== viewFlipped;
         if (researchMode) {
             // 研究モード: 全駒種を表示 + ±ボタン
             for (const type of order) {
@@ -9547,6 +9568,15 @@
         if (!namedlessMode) blindMode = false; // 駒名なしOFF → 目隠しも強制OFF
         selected = null; legalMoves = [];
         updateModeToggles();
+        renderAll();
+    });
+
+    // 盤反転ボタン
+    document.getElementById('flip-btn')?.addEventListener('click', () => {
+        viewFlipped = !viewFlipped;
+        selected = null; legalMoves = [];
+        updatePvpLayout();
+        renderLabels();
         renderAll();
     });
 
