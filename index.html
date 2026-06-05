@@ -6637,6 +6637,11 @@
         const sh = document.querySelector('.sente-hand-wrapper');
         if (gh) gh.style.order = !iAmSente ? '3' : '';
         if (sh) sh.style.order = !iAmSente ? '1' : '';
+        // デスクトップ横並び: justify-contentで上下位置を切り替え
+        // 先手視点: 後手(相手)=上(flex-start), 先手(自分)=下(flex-end)
+        // 後手視点: 先手(相手)=上(flex-start), 後手(自分)=下(flex-end)
+        if (gh) gh.style.justifyContent = !iAmSente ? 'flex-end' : 'flex-start';
+        if (sh) sh.style.justifyContent = !iAmSente ? 'flex-start' : 'flex-end';
 
         // ラベル: gote-label は DOM上は「後手row」に属する
         // iAmSente=true:  gote-row=上 → topRole(後手=相手), sente-row=下 → bottomRole(先手=自分)
