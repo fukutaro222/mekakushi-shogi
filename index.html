@@ -3687,7 +3687,7 @@
             const rank = currentUser?.rank ?? ratingToRank(currentUser?.rating ?? 1200);
             el.textContent = `👤 ${nick}  ${rank}`;
         } else {
-            el.textContent = `📧 ${currentUser?.email ?? ''}`;
+            el.textContent = '👤 読込中…';
         }
     }
 
@@ -7500,7 +7500,7 @@
         const rec = {
             sente_id:            currentUser.id,
             gote_id:             pvpMode ? opponentUserId : null,
-            sente_nickname:      pvpMode ? currentUser.nickname : (currentUser.nickname ?? currentUser.email),
+            sente_nickname:      currentUser.nickname ?? '名無し',
             gote_nickname:       pvpMode ? opponentNickname : 'CPU',
             winner,
             moves_count:         kifu.length,
@@ -7585,7 +7585,7 @@
         if (!el) return;
 
         if (currentUser) {
-            const nick   = currentUser.nickname ?? currentUser.email;
+            const nick   = currentUser.nickname ?? '名無し';
             const rank   = currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200);
             const rating = currentUser.rating ?? 1200;
             el.innerHTML =
