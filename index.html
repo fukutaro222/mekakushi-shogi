@@ -3619,7 +3619,15 @@
             .single();
         console.log('[Profile] 取得結果 - data:', data, 'error:', error?.code, error?.message);
 
-        if (!error) return data ?? PROFILE_DEFAULT;
+        if (!error) {
+            const profile = data ?? PROFILE_DEFAULT;
+            // プロフィールはあるがnicknameが未設定 → 登録直後に更新
+            if (initialNickname && !profile.nickname) {
+                await sb.from('profiles').update({ nickname: initialNickname }).eq('id', userId);
+                return { ...profile, nickname: initialNickname };
+            }
+            return profile;
+        }
 
         // 行が存在しない → 新規作成
         if (error.code === 'PGRST116' || error.code === '406') {
@@ -3825,18 +3833,24 @@
                     }
                     window.location.href = '/';
                 } else {
+                    // signUp前にnickname保存 — onAuthStateChangeがsignUp中に発火しても取得できるよう
+                    _pendingNickname = nickname;
+                    sessionStorage.setItem('_pendingNickname', nickname);
                     const result = await sb.auth.signUp({ email, password });
                     if (result.error) {
+                        _pendingNickname = null;
+                        sessionStorage.removeItem('_pendingNickname');
                         errEl.style.color = '#c0392b';
                         errEl.textContent = translateAuthError(result.error.message);
                         return;
                     }
                     if (!result.data?.session) {
+                        _pendingNickname = null;
+                        sessionStorage.removeItem('_pendingNickname');
                         errEl.style.color = '#c0392b';
                         errEl.textContent = '登録に失敗しました。しばらくしてから再度お試しください。';
                         return;
                     }
-                    sessionStorage.setItem('_pendingNickname', nickname);
                     window.location.href = '/';
                 }
 
@@ -4177,7 +4191,7 @@
     }
 
     // ── 定数 ──────────────────────────────────────────────────────────────────
-    const ADMIN_USER_ID = '87d3ff7f-c234-4cc2-85a2-cec673682b98';
+    const ADMIN_USER_ID = 'cae6fc02-84f7-406c-affb-6510bff0d2a7';
     function isAdmin() { return currentUser?.id === ADMIN_USER_ID; }
 
     const KANJI = {
