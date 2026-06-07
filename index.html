@@ -5451,6 +5451,44 @@
         if (destroyPeer && mmPeer) { try { mmPeer.destroy(); } catch(e){} mmPeer = null; }
     }
 
+    // ── マッチング通知・音 ──────────────────────────────────────────────────────
+    async function requestMatchNotificationPermission() {
+        if (typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+        await Notification.requestPermission().catch(() => {});
+    }
+
+    function sendMatchNotification() {
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        try {
+            new Notification('目隠し将棋', {
+                body: '対局相手が見つかりました！',
+                icon: '/favicon.svg',
+                tag: 'mm-match',
+            });
+        } catch(e) {}
+    }
+
+    function playMatchSound() {
+        try {
+            const ac = _getAC();
+            const t  = ac.currentTime;
+            // 3音の上昇アルペジオ（マッチング成立音）
+            [[440, 0], [554, 0.16], [659, 0.32]].forEach(([freq, delay]) => {
+                const osc = ac.createOscillator();
+                const g   = ac.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                osc.connect(g); g.connect(ac.destination);
+                const s = t + delay;
+                g.gain.setValueAtTime(0, s);
+                g.gain.linearRampToValueAtTime(0.22, s + 0.025);
+                g.gain.exponentialRampToValueAtTime(0.001, s + 0.55);
+                osc.start(s);
+                osc.stop(s + 0.6);
+            });
+        } catch(e) {}
+    }
+
     async function startMatchmaking() {
         if (!currentUser) {
             showToast('ログインが必要です');
@@ -5461,6 +5499,7 @@
             return;
         }
         showMatchmakingWaiting();
+        requestMatchNotificationPermission();
         mmMode = true;
         mmQueueId = null;
         mmQueueCreatedAt = null;
@@ -5619,6 +5658,8 @@
         // Hide MM UI, show pvp "接続中..." overlay
         hideMatchmakingWaiting();
         hideTitleScreen();
+        playMatchSound();
+        sendMatchNotification();
         pvpShowOverlay('対局相手が見つかりました。接続中...', null);
         pvpSetDot('waiting');
 
@@ -5651,6 +5692,8 @@
         // Hide MM UI, start game
         hideMatchmakingWaiting();
         hideTitleScreen();
+        playMatchSound();
+        sendMatchNotification();
 
         // Classify → welcome flow (same as pvpCreateRoom)
         c.on('open', () => { c.send({ type: 'classify' }); });
