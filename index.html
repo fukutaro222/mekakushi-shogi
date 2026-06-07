@@ -3492,7 +3492,7 @@
         // onAuthStateChange: ログイン・ログアウト・パスワードリセットを検知
         sb.auth.onAuthStateChange(async (event, session) => {
             console.log('[Auth] onAuthStateChange:', event);
-            if (event === 'SIGNED_IN' && session && !currentUser) {
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session && !currentUser) {
                 await onAuthSuccess(session);
             } else if (event === 'SIGNED_OUT') {
                 currentUser = null;
@@ -3500,10 +3500,10 @@
             }
         });
 
-        // getSession: 既存セッションを確認
+        // getSession: onAuthStateChangeが発火しなかった場合のフォールバック
         sb.auth.getSession().then(async ({ data: { session } }) => {
             console.log('[Auth] getSession 完了. session:', !!session);
-            if (session) await onAuthSuccess(session);
+            if (session && !currentUser) await onAuthSuccess(session);
             updateTitleAuth();
         }).catch(err => {
             console.error('[Auth] getSession エラー:', err);
