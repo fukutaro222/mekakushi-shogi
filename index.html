@@ -1781,6 +1781,133 @@
             text-align: center;
         }
         #nickname-cancel:hover { color: #5a3818; }
+
+        /* ── チュートリアルモーダル ── */
+        #tutorial-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            align-items: center;
+            justify-content: center;
+            z-index: 800;
+        }
+        #tutorial-modal.visible { display: flex; }
+        #tutorial-box {
+            background: #f5e8cc;
+            border: 2px solid #c89840;
+            border-radius: 16px;
+            padding: 32px 28px 24px;
+            width: min(460px, 94vw);
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+        #tutorial-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .tutorial-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #d4b878;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .tutorial-dot.active {
+            background: #8b5a1a;
+            transform: scale(1.25);
+        }
+        #tutorial-icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 10px;
+            line-height: 1;
+        }
+        #tutorial-title {
+            color: #2e1406;
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+        #tutorial-body {
+            color: #3a1e08;
+            font-size: 13.5px;
+            line-height: 1.85;
+            letter-spacing: 0.5px;
+            min-height: 130px;
+            padding: 14px 16px;
+            background: rgba(200,152,64,0.08);
+            border: 1px solid rgba(200,152,64,0.3);
+            border-radius: 8px;
+            margin-bottom: 22px;
+        }
+        #tutorial-body ul {
+            margin: 4px 0 0 0;
+            padding-left: 18px;
+        }
+        #tutorial-body li { margin-bottom: 5px; }
+        #tutorial-body .tut-example {
+            display: inline-block;
+            background: #2e1406;
+            color: #f0ddb0;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            letter-spacing: 1px;
+            margin: 1px 2px;
+        }
+        #tutorial-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        #tutorial-skip {
+            background: transparent;
+            border: none;
+            font-size: 12px;
+            color: #8b6a30;
+            cursor: pointer;
+            text-decoration: underline;
+            font-family: inherit;
+            padding: 4px 2px;
+        }
+        #tutorial-skip:hover { color: #5a3818; }
+        #tutorial-nav {
+            display: flex;
+            gap: 8px;
+        }
+        #tutorial-prev, #tutorial-next {
+            padding: 9px 18px;
+            border-radius: 7px;
+            font-size: 14px;
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        #tutorial-prev {
+            background: transparent;
+            border: 1.5px solid #c8a878;
+            color: #5a3818;
+        }
+        #tutorial-prev:hover { background: rgba(200,168,120,0.2); }
+        #tutorial-prev:disabled { opacity: 0.3; cursor: default; }
+        #tutorial-next {
+            background: linear-gradient(135deg, #c8a820, #a07818);
+            border: none;
+            color: #2e1406;
+            box-shadow: 0 3px 10px rgba(200,168,32,0.3);
+        }
+        #tutorial-next:hover { opacity: 0.88; }
+
         /* ── トースト通知 ── */
         #toast {
             position: fixed;
@@ -3331,6 +3458,23 @@
         </div>
     </div>
 
+    <!-- チュートリアルモーダル -->
+    <div id="tutorial-modal">
+        <div id="tutorial-box">
+            <div id="tutorial-dots"></div>
+            <div id="tutorial-icon"></div>
+            <div id="tutorial-title"></div>
+            <div id="tutorial-body"></div>
+            <div id="tutorial-footer">
+                <button id="tutorial-skip">スキップ</button>
+                <div id="tutorial-nav">
+                    <button id="tutorial-prev">◁ 戻る</button>
+                    <button id="tutorial-next">次へ ▷</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- トースト通知 -->
     <div id="toast"></div>
     <div id="auth-toast"></div>
@@ -3779,10 +3923,16 @@
                 currentUser.rank_achievement = profile.rank_achievement ?? 0;
                 updateUserBar();
                 updateTitleAuth();
-                if (!currentUser.nickname) showNicknameModal(true);
+                if (!currentUser.nickname) {
+                    showNicknameModal(true);
+                    // チュートリアルはニックネームモーダル閉じ後に表示（maybeShowTutorial呼び出しはハンドラ側）
+                } else {
+                    maybeShowTutorial();
+                }
             }).catch(e => {
                 console.warn('[Auth] バックグラウンドプロファイル取得失敗:', e.message);
                 if (!currentUser.nickname) showNicknameModal(true);
+                else maybeShowTutorial();
             });
         } else {
             showNicknameModal(true);
@@ -3831,6 +3981,7 @@
         updatePvpLayout();
         hideNicknameModal();
         showToast('ニックネームを設定しました！対局を楽しんでください。');
+        maybeShowTutorial();
     }
 
     function translateAuthError(msg) {
@@ -4289,10 +4440,24 @@
         // ニックネームモーダル
         document.getElementById('nickname-btn')?.addEventListener('click', showNicknameModal);
         document.getElementById('nickname-save').addEventListener('click', saveNickname);
-        document.getElementById('nickname-cancel').addEventListener('click', hideNicknameModal);
+        document.getElementById('nickname-cancel').addEventListener('click', () => { hideNicknameModal(); maybeShowTutorial(); });
         document.getElementById('nickname-input').addEventListener('keydown', e => {
             if (e.key === 'Enter') saveNickname();
             if (e.key === 'Escape') hideNicknameModal();
+        });
+
+        // チュートリアルモーダル
+        document.getElementById('tutorial-skip').addEventListener('click', hideTutorialModal);
+        document.getElementById('tutorial-prev').addEventListener('click', () => {
+            if (_tutorialStep > 0) { _tutorialStep--; _renderTutorialPage(); }
+        });
+        document.getElementById('tutorial-next').addEventListener('click', () => {
+            if (_tutorialStep < TUTORIAL_PAGES.length - 1) {
+                _tutorialStep++;
+                _renderTutorialPage();
+            } else {
+                hideTutorialModal();
+            }
         });
 
         // ※ getSession / onAuthStateChange はスクリプト先頭で登録済み（WASM分離のため）
@@ -8892,6 +9057,107 @@
         if (!parsed || !parsed.length) { showToast('読み込めない形式です'); return; }
         closeKifuImportModal();
         startAnalysisFromImport(parsed);
+    }
+
+    // ── チュートリアル ────────────────────────────────────────────────────────
+
+    let _tutorialStep = 0;
+    const TUTORIAL_PAGES = [
+        {
+            icon: '♟',
+            title: '目隠し将棋とは？',
+            html: `
+                <p>通常の将棋と同じルールで対局しますが、<strong>相手の駒が「見えない」</strong>状態で戦います。</p>
+                <ul>
+                    <li>自分の駒の位置はいつでも確認できます</li>
+                    <li>相手の駒はマス目だけ表示され、駒種は隠されています</li>
+                    <li>記憶と推理で相手の陣形を読み解くのが醍醐味です</li>
+                </ul>
+                <p>「駒名なし」モードでは自分の駒の種類も隠されます。</p>
+            `
+        },
+        {
+            icon: '☖',
+            title: '駒の動かし方',
+            html: `
+                <ul>
+                    <li>自分の駒をクリックして選択（緑色でハイライト）</li>
+                    <li>移動先のマスをクリックして指します</li>
+                    <li>持ち駒を打つ場合は画面左の持ち駒一覧から選択後、盤面をクリック</li>
+                    <li>成れる場合は確認ダイアログが表示されます</li>
+                </ul>
+                <p>音声入力でも指せます：<span class="tut-example">７六歩</span><span class="tut-example">２六飛成</span><span class="tut-example">６八金打</span></p>
+            `
+        },
+        {
+            icon: '王',
+            title: '勝利条件',
+            html: `
+                <ul>
+                    <li><strong>相手の王将を詰ませたら勝利</strong>です</li>
+                    <li>相手が「投了」ボタンを押した場合も勝利</li>
+                    <li>自分の王将が詰んだ場合は負けとなります</li>
+                    <li>通信対局で相手が切断した場合も勝利となります</li>
+                </ul>
+                <p>対局後はレーティングが変動し、棋譜が保存されます。</p>
+            `
+        },
+        {
+            icon: '🎤',
+            title: '音声認識の使い方',
+            html: `
+                <ul>
+                    <li>盤面下の<strong>マイクボタンを押しながら</strong>手番を読み上げます</li>
+                    <li>例：<span class="tut-example">７六歩</span><span class="tut-example">２六飛</span><span class="tut-example">６八金打</span></li>
+                    <li>「<span class="tut-example">投了</span>」と読み上げると投了できます</li>
+                    <li>目隠しモードでは盤面が見えないため、音声入力が特に有効です</li>
+                </ul>
+                <p>※音声認識には最初にマイクの許可が必要です。</p>
+            `
+        },
+    ];
+
+    function maybeShowTutorial() {
+        if (localStorage.getItem('mekakushi_tutorial_done')) return;
+        showTutorialModal();
+    }
+
+    function showTutorialModal() {
+        _tutorialStep = 0;
+        _renderTutorialPage();
+        document.getElementById('tutorial-modal').classList.add('visible');
+    }
+
+    function hideTutorialModal() {
+        document.getElementById('tutorial-modal').classList.remove('visible');
+        localStorage.setItem('mekakushi_tutorial_done', '1');
+    }
+
+    function _renderTutorialPage() {
+        const page = TUTORIAL_PAGES[_tutorialStep];
+        const total = TUTORIAL_PAGES.length;
+
+        // ドット更新
+        const dots = document.getElementById('tutorial-dots');
+        dots.innerHTML = '';
+        for (let i = 0; i < total; i++) {
+            const d = document.createElement('span');
+            d.className = 'tutorial-dot' + (i === _tutorialStep ? ' active' : '');
+            dots.appendChild(d);
+        }
+
+        document.getElementById('tutorial-icon').textContent = page.icon;
+        document.getElementById('tutorial-title').textContent = page.title;
+        document.getElementById('tutorial-body').innerHTML = page.html;
+
+        const prevBtn = document.getElementById('tutorial-prev');
+        const nextBtn = document.getElementById('tutorial-next');
+        prevBtn.disabled = _tutorialStep === 0;
+        if (_tutorialStep === total - 1) {
+            nextBtn.textContent = '始める ▷';
+        } else {
+            nextBtn.textContent = '次へ ▷';
+        }
     }
 
     // ── KIF エクスポート ──────────────────────────────────────────────────────
