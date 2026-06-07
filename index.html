@@ -1317,6 +1317,26 @@
         }
         .watch-panel-copy:hover { background: #2a4070; }
 
+        #share-x-btn {
+            display: block;
+            width: 100%;
+            margin-top: 10px;
+            padding: 9px 0;
+            background: #000;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            letter-spacing: 1px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        #share-x-btn:hover {
+            background: #1a1a1a;
+            border-color: #888;
+        }
         #to-top-btn {
             display: block;
             width: 100%;
@@ -3431,6 +3451,7 @@
             <button id="analyze-btn" style="display:none">感想戦を行う</button>
             <div id="analyze-request-area"></div>
             <button id="replay-btn" style="display:none">もう一度</button>
+            <a id="share-x-btn" href="#" target="_blank" rel="noopener noreferrer">𝕏 でシェアする</a>
             <button id="to-top-btn">⌂ トップに戻る</button>
         </div>
     </div>
@@ -7619,6 +7640,12 @@
 
         showFlashBanner(resultMsg, iWon ? 'win' : 'lose');
         document.getElementById('gameover-text').textContent = overlayText;
+        const _shareOpp = pvpMode ? (opponentNickname ?? '相手') : 'CPU';
+        const _shareText = iWon
+            ? `目隠し将棋で${_shareOpp}さんに勝ちました！ #目隠し将棋 https://mekakushi-shogi.vercel.app`
+            : `目隠し将棋で${_shareOpp}さんと熱戦を繰り広げました！ #目隠し将棋 https://mekakushi-shogi.vercel.app`;
+        document.getElementById('share-x-btn').href =
+            'https://twitter.com/intent/tweet?text=' + encodeURIComponent(_shareText);
         document.getElementById('practice-note').style.display = pvpMode ? 'none' : 'block';
         // 感想戦ボタン: PvP対局で新形式棋譜が1手以上ある場合のみ表示（CPU対局では非表示）
         const canAnalyze = pvpMode && kifu.length > 0 && kifu[0] && typeof kifu[0].kind === 'string';
