@@ -1603,7 +1603,7 @@
             transition: background 0.15s, color 0.15s;
         }
         .auth-tab.active { background: #2e1406; color: #f0ddb0; }
-        #auth-nickname, #auth-password {
+        #auth-nickname, #auth-password, #auth-password-confirm {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #c8a878;
@@ -1613,7 +1613,7 @@
             font-family: inherit;
             outline: none;
         }
-        #auth-nickname:focus, #auth-password:focus {
+        #auth-nickname:focus, #auth-password:focus, #auth-password-confirm:focus {
             border-color: #8b5a1a;
             box-shadow: 0 0 0 2px rgba(139,90,26,0.2);
         }
@@ -3237,6 +3237,7 @@
                 </div>
                 <input type="text" id="auth-nickname" placeholder="ニックネーム" autocomplete="username">
                 <input type="password" id="auth-password" placeholder="パスワード（6文字以上）" autocomplete="current-password">
+                <input type="password" id="auth-password-confirm" placeholder="パスワード（確認）" autocomplete="new-password" style="display:none">
                 <div id="auth-error"></div>
                 <button id="auth-submit">ログイン</button>
             </div>
@@ -3834,6 +3835,8 @@
             document.getElementById('tab-register').classList.remove('active');
             document.getElementById('auth-submit').textContent = 'ログイン';
             document.getElementById('auth-error').textContent = '';
+            document.getElementById('auth-password-confirm').style.display = 'none';
+            document.getElementById('auth-password-confirm').value = '';
         });
         document.getElementById('tab-register').addEventListener('click', () => {
             authIsLogin = false;
@@ -3841,6 +3844,7 @@
             document.getElementById('tab-login').classList.remove('active');
             document.getElementById('auth-submit').textContent = '新規登録';
             document.getElementById('auth-error').textContent = '';
+            document.getElementById('auth-password-confirm').style.display = '';
         });
 
         // フォーム送信 — onclick で既存リスナーをすべて上書き
@@ -3865,6 +3869,14 @@
                 errEl.style.color = '#c0392b';
                 errEl.textContent = 'パスワードは6文字以上で入力してください';
                 return;
+            }
+            if (!authIsLogin) {
+                const passwordConfirm = document.getElementById('auth-password-confirm').value;
+                if (password !== passwordConfirm) {
+                    errEl.style.color = '#c0392b';
+                    errEl.textContent = 'パスワードが一致しません';
+                    return;
+                }
             }
             if (!sb || !sb.auth) {
                 errEl.style.color = '#c0392b';
@@ -3922,7 +3934,8 @@
 
         // Enterキーでも送信
         document.getElementById('auth-nickname').onkeydown =
-        document.getElementById('auth-password').onkeydown = function(e) {
+        document.getElementById('auth-password').onkeydown =
+        document.getElementById('auth-password-confirm').onkeydown = function(e) {
             if (e.key === 'Enter') document.getElementById('auth-submit').click();
         };
 
