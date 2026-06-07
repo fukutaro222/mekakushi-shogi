@@ -4899,14 +4899,50 @@
         console.log('[Engine >]', posCmd);
         wasmEngine.postMessage(posCmd);
         return new Promise((resolve, reject) => {
-            bestMoveResolve = resolve;
+            let resolved = false;
+            let latestPvMove = null;
+
+            // info pv の先頭手をフォールバック用に記録
+            const infoListener = line => {
+                if (resolved || !line.startsWith('info')) return;
+                const m = line.match(/\bpv\s+(\S+)/);
+                if (m) latestPvMove = m[1];
+            };
+            wasmEngine.addMessageListener(infoListener);
+
+            const finish = (mv, isError) => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(stopId);
+                clearTimeout(hardId);
+                wasmEngine.removeMessageListener(infoListener);
+                bestMoveResolve = null;
+                if (isError) reject(new Error('timeout'));
+                else resolve(mv);
+            };
+
+            bestMoveResolve = mv => finish(mv, false);
+
+            // 9秒: stop を送りエンジンに bestmove を即時出力させる
+            const stopId = setTimeout(() => {
+                if (!resolved) {
+                    console.warn('[Engine] 9s経過 → stop送信');
+                    wasmEngine.postMessage('stop');
+                }
+            }, 9000);
+
+            // 10秒ハードタイムアウト: pv があればそれを使い、なければ reject → ランダム手
+            const hardId = setTimeout(() => {
+                if (!resolved) {
+                    console.warn('[Engine] 10sハードタイムアウト. latestPv:', latestPvMove);
+                    if (latestPvMove) finish(latestPvMove, false);
+                    else finish(null, true);
+                }
+            }, 10000);
+
             const goCmd = 'go movetime 5000';
             console.log('[Engine >]', goCmd);
             wasmEngine.postMessage(goCmd);
-            // 5秒で応答がない場合の安全網（go movetimeで通常は5秒以内に返る）
-            setTimeout(() => {
-                if (bestMoveResolve) { bestMoveResolve = null; reject(new Error('timeout')); }
-            }, 6000);
         });
     }
 
