@@ -5337,8 +5337,11 @@
 
     // ── 自動マッチング ──────────────────────────────────────────────────────────
 
+    // true=全ユーザーと対戦（利用者増加後はfalseに戻す）
+    const MM_IGNORE_RATING = true;
+
     function getMatchRatingRange(myRating, strength, expansion) {
-        if (strength === 'any') return [0, 99999];
+        if (MM_IGNORE_RATING || strength === 'any') return [0, 99999];
         const ex = (expansion ?? 0) * 100;
         switch (strength) {
             case 'same':          return [myRating - 100 - ex, myRating + 100 + ex];
