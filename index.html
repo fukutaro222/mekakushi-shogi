@@ -1274,6 +1274,21 @@
             margin-top: 4px;
         }
         #mm-cancel-btn:hover { background: rgba(200, 168, 32, 0.1); color: #c8a820; border-color: rgba(200,168,32,0.6); }
+        #mm-stats {
+            display: flex;
+            gap: 18px;
+            font-size: 12px;
+            color: rgba(200, 168, 80, 0.5);
+            letter-spacing: 1px;
+            font-family: 'Yu Mincho', serif;
+            border-top: 1px solid rgba(139, 106, 26, 0.2);
+            padding-top: 12px;
+            width: 100%;
+            justify-content: center;
+        }
+        .mm-stat-item { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+        .mm-stat-num { font-size: 20px; color: rgba(200, 168, 80, 0.8); font-family: monospace; line-height: 1; }
+        .mm-stat-label { font-size: 11px; }
 
         /* ── 観戦URLパネル（対局中にホストへ表示） ── */
         #watch-url-panel {
@@ -2999,6 +3014,16 @@
                 <div id="mm-waiting-timer">待機中... 00:00</div>
                 <div id="mm-waiting-msg"></div>
                 <button id="mm-cancel-btn">キャンセル</button>
+                <div id="mm-stats">
+                    <div class="mm-stat-item">
+                        <span class="mm-stat-num" id="mm-stat-playing">—</span>
+                        <span class="mm-stat-label">対局中</span>
+                    </div>
+                    <div class="mm-stat-item">
+                        <span class="mm-stat-num" id="mm-stat-waiting">—</span>
+                        <span class="mm-stat-label">待機中</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -4355,6 +4380,7 @@
     let mmSubscription   = null;
     let mmTimerInterval  = null;
     let mmTimeoutId      = null;   // 600秒ハードタイムアウト
+    let mmStatsInterval  = null;   // 人数表示の10秒ポーリング
     let mmStrength       = 'same';
     let mmTimeLimit      = 600;
     let mmByoyomi        = 30;
@@ -5362,17 +5388,44 @@
         document.getElementById('title-content').classList.remove('hidden');
         hideBackBtn();
     }
+    async function fetchMmStats() {
+        if (!sb) return;
+        try {
+            const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+            const [waitRes, playRes] = await Promise.all([
+                sb.from('matchmaking_queue')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'waiting'),
+                // gamesテーブルにstatus列がないため、30分以内にマッチングしたユーザー数で代替
+                sb.from('matchmaking_queue')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', 'matched')
+                    .gte('created_at', thirtyMinAgo),
+            ]);
+            const wEl = document.getElementById('mm-stat-waiting');
+            const pEl = document.getElementById('mm-stat-playing');
+            if (wEl) wEl.textContent = waitRes.count ?? '—';
+            if (pEl) pEl.textContent = playRes.count ?? '—';
+        } catch(e) {
+            console.warn('[MM Stats]', e.message);
+        }
+    }
+
     function showMatchmakingWaiting() {
         document.getElementById('mm-panel').classList.add('hidden');
         document.getElementById('mm-waiting-panel').classList.remove('hidden');
         document.getElementById('mm-waiting-text').textContent = '対局相手を探しています...';
         document.getElementById('mm-waiting-timer').textContent = '待機中... 00:00';
         document.getElementById('mm-waiting-msg').style.display = 'none';
+        // 人数を即取得してから10秒ごとに更新
+        fetchMmStats();
+        mmStatsInterval = setInterval(fetchMmStats, 10000);
         showBackBtn(() => cancelMatchmaking());
     }
     function hideMatchmakingWaiting() {
         document.getElementById('mm-waiting-panel').classList.add('hidden');
-        clearInterval(mmTimerInterval); mmTimerInterval = null;
+        clearInterval(mmTimerInterval);  mmTimerInterval = null;
+        clearInterval(mmStatsInterval);  mmStatsInterval = null;
         hideBackBtn();
     }
 
@@ -5380,6 +5433,7 @@
         mmMode = false;
         clearInterval(mmTimerInterval); mmTimerInterval = null;
         clearTimeout(mmTimeoutId);      mmTimeoutId = null;
+        clearInterval(mmStatsInterval); mmStatsInterval = null;
         if (mmSubscription) { try { mmSubscription.unsubscribe(); } catch(e){} mmSubscription = null; }
         if (destroyPeer && mmPeer) { try { mmPeer.destroy(); } catch(e){} mmPeer = null; }
     }
