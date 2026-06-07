@@ -3258,8 +3258,7 @@
         <div id="nickname-box">
             <div id="nickname-welcome-icon">♟️</div>
             <div id="nickname-welcome-title">ようこそ！目隠し将棋へ</div>
-            <div id="nickname-welcome-desc">対局で使用するニックネームを設定してください。<br>後から変更することもできます。</div>
-            <h3 id="nickname-edit-title" style="display:none">ニックネーム変更</h3>
+            <div id="nickname-welcome-desc">対局で使用するニックネームを設定してください。</div>
             <input type="text" id="nickname-input" placeholder="ニックネームを入力（16文字以内）" maxlength="16">
             <div id="nickname-error"></div>
             <div class="nickname-btns">
@@ -3738,18 +3737,9 @@
         }
     }
 
-    function showNicknameModal(isFirstTime = false) {
-        const isWelcome = isFirstTime && !currentUser?.nickname;
-        document.getElementById('nickname-input').value = currentUser?.nickname ?? '';
+    function showNicknameModal() {
+        document.getElementById('nickname-input').value = '';
         document.getElementById('nickname-error').textContent = '';
-        document.getElementById('nickname-welcome-icon').style.display = isWelcome ? '' : 'none';
-        document.getElementById('nickname-welcome-title').style.display = isWelcome ? '' : 'none';
-        document.getElementById('nickname-welcome-desc').style.display = isWelcome ? '' : 'none';
-        document.getElementById('nickname-edit-title').style.display = isWelcome ? 'none' : '';
-        const saveBtn = document.getElementById('nickname-save');
-        const cancelBtn = document.getElementById('nickname-cancel');
-        saveBtn.textContent = isWelcome ? '設定する' : '保存';
-        cancelBtn.textContent = isWelcome ? '後で設定する' : 'キャンセル';
         document.getElementById('nickname-modal').classList.add('visible');
         document.getElementById('nickname-input').focus();
     }
@@ -7646,18 +7636,12 @@
             el.innerHTML =
                 `<span class="gac-user" id="gac-user-btn">👤 ${nick}　${rank}　(${rating})</span>` +
                 `<div class="gac-dropdown hidden" id="gac-dropdown">` +
-                    `<button id="gac-nickname-btn">ニックネーム変更</button>` +
                     `<button id="gac-logout-btn">ログアウト</button>` +
                 `</div>`;
 
             document.getElementById('gac-user-btn').addEventListener('click', e => {
                 e.stopPropagation();
                 document.getElementById('gac-dropdown').classList.toggle('hidden');
-            });
-            document.getElementById('gac-nickname-btn').addEventListener('click', e => {
-                e.stopPropagation();
-                document.getElementById('gac-dropdown').classList.add('hidden');
-                showNicknameModal(false);
             });
             document.getElementById('gac-logout-btn').addEventListener('click', async e => {
                 e.stopPropagation();
