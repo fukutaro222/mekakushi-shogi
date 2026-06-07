@@ -4354,7 +4354,7 @@
     let mmPeer           = null;
     let mmSubscription   = null;
     let mmTimerInterval  = null;
-    let mmTimeoutId      = null;   // 120秒ハードタイムアウト
+    let mmTimeoutId      = null;   // 600秒ハードタイムアウト
     let mmStrength       = 'same';
     let mmTimeLimit      = 600;
     let mmByoyomi        = 30;
@@ -5430,8 +5430,8 @@
             mmQueueId = data.id;
             mmQueueCreatedAt = data.created_at;
 
-            // 120秒ハードタイムアウト
-            mmTimeoutId = setTimeout(() => onMatchmakingTimeout(), 120000);
+            // 600秒ハードタイムアウト
+            mmTimeoutId = setTimeout(() => onMatchmakingTimeout(), 600000);
 
             // タイマー: 30s/60s で range 拡張、10秒ごとにポーリング
             const startTime = Date.now();
