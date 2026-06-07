@@ -2138,6 +2138,23 @@
         }
         #analyze-btn:hover { background: linear-gradient(135deg, #243848, #182c40); }
         #analyze-btn:disabled { opacity: 0.5; cursor: default; }
+        #kifu-share-btn {
+            display: block;
+            width: 100%;
+            background: linear-gradient(135deg, #1a2e10, #122008);
+            color: #80c858;
+            border: 2px solid #3a7020;
+            border-radius: 6px;
+            padding: 11px 36px;
+            font-size: 16px;
+            font-family: inherit;
+            font-weight: bold;
+            letter-spacing: 3px;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-bottom: 8px;
+        }
+        #kifu-share-btn:hover { background: linear-gradient(135deg, #243c18, #1a2e10); }
         #analyze-request-area {
             font-size: 13px;
             color: #90b8d8;
@@ -3451,6 +3468,7 @@
             <button id="analyze-btn" style="display:none">感想戦を行う</button>
             <div id="analyze-request-area"></div>
             <button id="replay-btn" style="display:none">もう一度</button>
+            <button id="kifu-share-btn" style="display:none">棋譜を共有</button>
             <a id="share-x-btn" href="#" target="_blank" rel="noopener noreferrer">𝕏 でシェアする</a>
             <button id="to-top-btn">⌂ トップに戻る</button>
         </div>
@@ -4361,6 +4379,7 @@
     let analyzeStep      = 0;    // 棋譜上の現在位置
     let analyzeVariation = [];   // 棋譜から外れた変化手順
     let pvpAnalyzeAsked  = false; // PvP: 自分が感想戦リクエスト送信済み
+    let lastSavedGameId  = null;  // 直前の対局のSupabase game UUID（棋譜共有URL用）
 
     // ── 対局時計 ──
     let clockEnabled  = false;
@@ -5227,6 +5246,11 @@
                         updateUserBar();
                         if (promoted) showPromotionBanner(newRank);
                     });
+            }
+            // 後手側: 先手が保存したgame IDで棋譜共有ボタンを有効化
+            if (data.gameId) {
+                lastSavedGameId = data.gameId;
+                document.getElementById('kifu-share-btn').style.display = '';
             }
         } else if (data.type === 'analyze_request') {
             if (pvpAnalyzeAsked) {
@@ -7653,6 +7677,8 @@
         document.getElementById('analyze-btn').disabled = false;
         document.getElementById('analyze-request-area').textContent = '';
         pvpAnalyzeAsked = false;
+        lastSavedGameId = null;
+        document.getElementById('kifu-share-btn').style.display = 'none';
         stopAlwaysListening();
         setTimeout(() => {
             document.getElementById('gameover-overlay').style.display = 'flex';
@@ -7661,8 +7687,15 @@
         speakText(moveSpeech ? `${moveSpeech}。${base}` : base);
         lastWinnerRole = winnerRole;
         broadcastToWatchers();
-        // 棋譜・レーティングをSupabaseに保存
-        if (currentUser && winnerRole) saveGame(winnerRole).catch(console.error);
+        // 棋譜・レーティングをSupabaseに保存（先手または非PvPのみ）
+        if (currentUser && winnerRole) {
+            saveGame(winnerRole).then(id => {
+                if (id) {
+                    lastSavedGameId = id;
+                    document.getElementById('kifu-share-btn').style.display = '';
+                }
+            }).catch(console.error);
+        }
     }
 
     // ── Phase 2: レーティング・棋譜保存 ──────────────────────────────────────
@@ -7751,7 +7784,8 @@
             gote_rating_after:   goteRatingAfter,
         };
 
-        await sb.from('games').insert(rec);
+        const { data: savedGame } = await sb.from('games').insert(rec).select('id').single();
+        const savedGameId = savedGame?.id ?? null;
 
         // レーティング・段位更新は pvp のみ
         if (pvpMode) {
@@ -7766,10 +7800,11 @@
             currentUser.rank_achievement = newAchievement;
             updateUserBar();
 
-            pvpSend({ type: 'game_result', winner, goteNewRating: goteRatingAfter });
+            pvpSend({ type: 'game_result', winner, goteNewRating: goteRatingAfter, gameId: savedGameId });
 
             if (promoted) showPromotionBanner(newRank);
         }
+        return savedGameId;
     }
 
     // ── タイトル画面 ─────────────────────────────────────────────────────────
@@ -7807,6 +7842,8 @@
         hideContextMenu();
         hideResearchPanel();
         stopGameBGM();
+        lastSavedGameId = null;
+        document.getElementById('kifu-share-btn').style.display = 'none';
         updateTitleAuth();
         initTitleParticles();
     }
@@ -9524,6 +9561,17 @@
     _pieceTex.src = 'piece.png';
     showTitleScreen();
 
+    // 棋譜共有URLからの自動読み込み（?kifu=<game_uuid>）
+    const _kifuParam = new URLSearchParams(location.search).get('kifu');
+    if (_kifuParam && sb) {
+        sb.from('games').select('kifu,sente_nickname,gote_nickname').eq('id', _kifuParam).single()
+            .then(({ data: gd, error: ge }) => {
+                if (ge || !gd?.kifu?.length) { showToast('棋譜が見つかりませんでした'); return; }
+                startAnalysisFromImport(gd.kifu);
+                showToast(`${gd.sente_nickname ?? '先手'} vs ${gd.gote_nickname ?? '後手'} の棋譜を読み込みました`);
+            });
+    }
+
     // マイクボタンのイベント
     const micBtn = document.getElementById('mic-btn');
     if (micBtn) {
@@ -9608,6 +9656,15 @@
         document.getElementById('gameover-overlay').style.display = 'none';
         if (pvpMode) pvpSend({ type: 'reset' });
         initBoard(); renderLabels(); renderAll();
+    });
+
+    // 棋譜共有ボタン
+    document.getElementById('kifu-share-btn')?.addEventListener('click', () => {
+        if (!lastSavedGameId) return;
+        const url = `${location.origin}/?kifu=${lastSavedGameId}`;
+        navigator.clipboard.writeText(url)
+            .then(() => showToast('棋譜URLをコピーしました'))
+            .catch(() => showToast('コピーに失敗しました'));
     });
 
     // 感想戦ボタン
