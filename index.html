@@ -1769,6 +1769,30 @@
             transform: translateX(-50%) translateY(0);
         }
 
+        #auth-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-12px);
+            background: linear-gradient(135deg, #2e1406 0%, #4a2010 100%);
+            color: #f0ddb0;
+            padding: 11px 28px;
+            border-radius: 8px;
+            border: 1px solid #8b6a30;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 1px rgba(212,168,75,0.15);
+            opacity: 0;
+            transition: opacity 0.35s ease, transform 0.35s ease;
+            z-index: 3000;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #auth-toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
         /* ── ランキングボタン（常時表示） ── */
         #ranking-btn-global {
             display: block;
@@ -3247,6 +3271,7 @@
 
     <!-- トースト通知 -->
     <div id="toast"></div>
+    <div id="auth-toast"></div>
 
     <!-- ユーザーバー -->
     <div id="user-bar">
@@ -3603,6 +3628,18 @@
     let _pendingNickname = sessionStorage.getItem('_pendingNickname') ?? null;
     if (_pendingNickname) sessionStorage.removeItem('_pendingNickname');
 
+    const _authSuccessType = sessionStorage.getItem('_authSuccessType') ?? null;
+    if (_authSuccessType) sessionStorage.removeItem('_authSuccessType');
+
+    function showAuthToast(msg) {
+        const el = document.getElementById('auth-toast');
+        if (!el) return;
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(el._timer);
+        el._timer = setTimeout(() => el.classList.remove('show'), 3500);
+    }
+
     async function nicknameToEmail(nickname) {
         const data = new TextEncoder().encode(nickname.toLowerCase().trim());
         const hash = await crypto.subtle.digest('SHA-256', data);
@@ -3662,7 +3699,9 @@
         document.getElementById('user-bar').classList.add('visible');
         updateUserBar();
         updateTitleAuth();
-        console.log('[Auth] 画面遷移完了（profile取得はバックグラウンドで継続）');
+        if (_authSuccessType === 'login')    showAuthToast('ログインに成功しました');
+        if (_authSuccessType === 'register') showAuthToast('新規登録が完了しました');
+        console.log('[Auth] 画面遷移完了 (profile取得はバックグラウンドで継続)');
 
         // ③ profilesをバックグラウンドで取得してUIを更新（遷移はブロックしない）
         const _nick = _pendingNickname;
@@ -3831,6 +3870,7 @@
                         errEl.textContent = translateAuthError(result.error.message);
                         return;
                     }
+                    sessionStorage.setItem('_authSuccessType', 'login');
                     window.location.href = '/';
                 } else {
                     // signUp前にnickname保存 — onAuthStateChangeがsignUp中に発火しても取得できるよう
@@ -3851,6 +3891,7 @@
                         errEl.textContent = '登録に失敗しました。しばらくしてから再度お試しください。';
                         return;
                     }
+                    sessionStorage.setItem('_authSuccessType', 'register');
                     window.location.href = '/';
                 }
 
