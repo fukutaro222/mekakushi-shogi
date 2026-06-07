@@ -4354,6 +4354,7 @@
     let mmPeer           = null;
     let mmSubscription   = null;
     let mmTimerInterval  = null;
+    let mmTimeoutId      = null;   // 120秒ハードタイムアウト
     let mmStrength       = 'same';
     let mmTimeLimit      = 600;
     let mmByoyomi        = 30;
@@ -5375,6 +5376,7 @@
     function mmCleanup(destroyPeer) {
         mmMode = false;
         clearInterval(mmTimerInterval); mmTimerInterval = null;
+        clearTimeout(mmTimeoutId);      mmTimeoutId = null;
         if (mmSubscription) { try { mmSubscription.unsubscribe(); } catch(e){} mmSubscription = null; }
         if (destroyPeer && mmPeer) { try { mmPeer.destroy(); } catch(e){} mmPeer = null; }
     }
@@ -5397,29 +5399,41 @@
         mmPeer = new Peer(mmPeerId, { debug: 0 });
 
         mmPeer.on('open', async (id) => {
-            const { data, error } = await sb.from('matchmaking_queue').insert({
-                user_id:           currentUser.id,
-                rating:            currentUser.rating ?? 1500,
-                nickname:          currentUser.nickname ?? null,
-                matching_strength: mmStrength,
-                time_limit:        mmTimeLimit,
-                byoyomi:           mmByoyomi,
-                spectate_allowed:  mmSpectate,
-                peer_id:           id,
-                status:            'waiting'
-            }).select().single();
+            // INSERT リトライ（最大3回、1.5秒間隔）
+            let data = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const result = await sb.from('matchmaking_queue').insert({
+                    user_id:           currentUser.id,
+                    rating:            currentUser.rating ?? 1500,
+                    nickname:          currentUser.nickname ?? null,
+                    matching_strength: mmStrength,
+                    time_limit:        mmTimeLimit,
+                    byoyomi:           mmByoyomi,
+                    spectate_allowed:  mmSpectate,
+                    peer_id:           id,
+                    status:            'waiting'
+                }).select().single();
+                if (!result.error && result.data) { data = result.data; break; }
+                console.warn('[MM] INSERT失敗 attempt', attempt + 1, result.error?.message);
+                if (attempt < 2 && mmMode) await new Promise(r => setTimeout(r, 1500));
+            }
 
-            if (error || !data) {
-                showToast('マッチング登録に失敗しました');
-                mmCleanup(true);
-                hideMatchmakingWaiting();
-                showMatchmakingPanel();
+            if (!data || !mmMode) {
+                if (mmMode) {
+                    showToast('マッチング登録に失敗しました');
+                    mmCleanup(true);
+                    hideMatchmakingWaiting();
+                    showMatchmakingPanel();
+                }
                 return;
             }
             mmQueueId = data.id;
             mmQueueCreatedAt = data.created_at;
 
-            // Start timer: expands range at 30s (+100) and 60s (+100 more)
+            // 120秒ハードタイムアウト
+            mmTimeoutId = setTimeout(() => onMatchmakingTimeout(), 120000);
+
+            // タイマー: 30s/60s で range 拡張、10秒ごとにポーリング
             const startTime = Date.now();
             mmExpansion = 0;
             mmTimerInterval = setInterval(() => {
@@ -5437,17 +5451,20 @@
                     mmExpansion = 2;
                     if (msgEl) { msgEl.textContent = 'さらに条件を緩和して検索中...'; msgEl.style.display = 'block'; }
                     checkForMatch();
+                } else if (elapsed % 10 === 0 && elapsed > 0) {
+                    // 10秒ごとにポーリング（Realtime が取りこぼした場合の補完）
+                    checkForMatch();
                 }
             }, 1000);
 
-            // Subscribe to new queue entries
+            // Realtime: 新規エントリを検知して即マッチ確認
             mmSubscription = sb.channel('mm-queue-' + currentUser.id)
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matchmaking_queue' }, () => {
                     if (mmMode) checkForMatch();
                 })
                 .subscribe();
 
-            // Immediately check for existing matches
+            // 既存エントリを即チェック
             checkForMatch();
         });
 
