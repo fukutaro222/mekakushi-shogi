@@ -1078,12 +1078,19 @@
         #rematch-accept-btn { background: #4a8840; color: #e8f8e0; }
         #rematch-decline-btn { background: #444; color: #aaa; }
 
-        /* ── 観戦バッジ ── */
-        #watch-badge {
+        /* ── 観戦コントロール ── */
+        #watch-controls {
             display: none;
             position: fixed;
             top: 12px;
             right: 12px;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            z-index: 500;
+        }
+        #watch-controls.visible { display: flex; }
+        #watch-badge {
             background: rgba(10,20,40,0.9);
             color: #90b8f0;
             border: 1px solid #4888cc;
@@ -1092,9 +1099,25 @@
             font-size: 13px;
             font-weight: bold;
             letter-spacing: 2px;
-            z-index: 500;
         }
-        #watch-badge.visible { display: block; }
+        #watch-switch-btn {
+            background: rgba(10,20,40,0.85);
+            color: #60a8e0;
+            border: 1px solid #3a6898;
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 12px;
+            font-family: inherit;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        #watch-switch-btn:hover {
+            background: rgba(20,40,80,0.9);
+            border-color: #5080b8;
+            color: #80c0f0;
+        }
 
         /* ── 観戦URL（pvp-urlの下に追加） ── */
         #pvp-watch-area {
@@ -3096,6 +3119,7 @@
             <p id="title-subtitle">MEKAKUSHI SHOGI</p>
             <div id="title-buttons">
                 <button class="title-btn primary" id="title-pvp-btn">対　　局</button>
+                <button class="title-btn" id="title-watch-btn">観　　戦</button>
                 <button class="title-btn primary" id="title-practice-btn">練 習 対 局</button>
                 <button class="title-btn" id="title-board-btn">掲　示　板</button>
                 <button class="title-btn" id="title-research-btn">研 究 モ ー ド</button>
@@ -3636,8 +3660,11 @@
         </div>
     </div>
 
-    <!-- 観戦バッジ -->
-    <div id="watch-badge">👁 観戦中</div>
+    <!-- 観戦コントロール -->
+    <div id="watch-controls">
+        <div id="watch-badge">👁 観戦中</div>
+        <button id="watch-switch-btn">別の対局を観る</button>
+    </div>
 
     <!-- フラッシュバナー -->
     <div id="flash-banner"></div>
@@ -4153,6 +4180,9 @@
             }
             showMatchmakingPanel();
         });
+        document.getElementById('title-watch-btn').addEventListener('click', () => {
+            startRandomWatch(null);
+        });
         document.getElementById('title-practice-btn').addEventListener('click', () => {
             if (!wasmReady) _startWasmEngine();
             showSetupPanel();
@@ -4567,8 +4597,9 @@
     let opponentRating   = null;   // PvP相手の開始時レーティング
 
     // ── 観戦モード ──
-    let watchMode  = false;   // 観戦者として接続中
-    let watchConns = [];      // ホスト側: 観戦者のコネクション一覧
+    let watchMode   = false;  // 観戦者として接続中
+    let watchConns  = [];     // ホスト側: 観戦者のコネクション一覧
+    let watchRoomId = null;   // 現在観戦中のroomId（別の対局切替用）
 
     // ── 回線切れ再接続 ──
     let pvpWaitingReconnect    = false;
@@ -5944,6 +5975,10 @@
                     chatStart(peer.id);
                     const watchUrl = `${location.origin}${location.pathname}?watch=${peer.id}`;
                     showWatchUrl(watchUrl);
+                    // 観戦一覧向けにroom_idをSupabaseへ登録
+                    if (sb && setupSpectate) {
+                        sb.from('matchmaking_queue').update({ room_id: peer.id }).eq('peer_id', peer.id).catch(() => {});
+                    }
                 }
             } else if (!isWatcher) {
                 pvpOnData(d);
@@ -6758,9 +6793,11 @@
     // ── 観戦モード ──────────────────────────────────────────────────────────────────
 
     function pvpJoinWatch(roomId) {
-        watchMode = true;
+        watchMode   = true;
+        watchRoomId = roomId;
         hideTitleScreen();
-        document.getElementById('watch-badge').classList.add('visible');
+        document.getElementById('watch-controls').classList.add('visible');
+        document.getElementById('gameover-overlay').style.display = 'none';
         document.getElementById('rematch-btn').style.display = 'none';
         updatePvpLayout(); // 先手視点で固定表示（pvpMode=false, playerSide='sente'）
         pvpShowOverlay('観戦接続中...', null);
@@ -6848,6 +6885,42 @@
         };
     }
 
+    async function fetchWatchableGames() {
+        if (!sb) return [];
+        const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+        try {
+            const { data } = await sb.from('matchmaking_queue')
+                .select('room_id, nickname')
+                .eq('status', 'matched')
+                .eq('spectate_allowed', true)
+                .not('room_id', 'is', null)
+                .gte('created_at', threeHoursAgo);
+            return (data ?? []).filter(g => g.room_id);
+        } catch { return []; }
+    }
+
+    async function startRandomWatch(currentRoomId) {
+        showToast('観戦できる対局を探しています...');
+        const games = await fetchWatchableGames();
+        if (!games.length) {
+            showToast('現在観戦できる対局がありません');
+            return;
+        }
+        // 現在と別の対局を優先（1件しかなければ同じ対局 or 切替なし）
+        const others = currentRoomId ? games.filter(g => g.room_id !== currentRoomId) : games;
+        if (!others.length) {
+            showToast('他に観戦できる対局がありません');
+            return;
+        }
+        const chosen = others[Math.floor(Math.random() * others.length)];
+        if (watchMode) {
+            // 観戦中の場合: 既存接続を切ってから新たに接続
+            document.getElementById('gameover-overlay').style.display = 'none';
+            pvpStop();
+        }
+        pvpJoinWatch(chosen.room_id);
+    }
+
     function broadcastToWatchers() {
         if (!watchConns.length) return;
         const state = buildWatchState();
@@ -6903,9 +6976,10 @@
 
     function pvpStop() {
         watchConns.forEach(c => { try { c.close(); } catch(e){} });
-        watchConns = [];
-        watchMode = false;
-        document.getElementById('watch-badge').classList.remove('visible');
+        watchConns  = [];
+        watchMode   = false;
+        watchRoomId = null;
+        document.getElementById('watch-controls').classList.remove('visible');
         const watchPanel = document.getElementById('watch-url-panel');
         if (watchPanel) watchPanel.style.display = 'none';
         document.getElementById('rematch-btn').style.display = '';
@@ -9973,8 +10047,13 @@
     document.getElementById('to-top-btn')?.addEventListener('click', () => {
         document.getElementById('gameover-overlay').style.display = 'none';
         if (analyzeMode) { analyzeMode = false; analyzeVariation = []; analyzeKifu = []; analyzeStep = 0; document.getElementById('analyze-bar').classList.remove('active'); }
-        if (pvpMode) pvpStop();
+        if (pvpMode || watchMode) pvpStop();
         showTitleScreen();
+    });
+
+    // 観戦: 別の対局に切り替え
+    document.getElementById('watch-switch-btn')?.addEventListener('click', () => {
+        startRandomWatch(watchRoomId);
     });
 
     // トップボタン（対局中）
