@@ -5745,6 +5745,30 @@
         mmQueueId = null;
         mmQueueCreatedAt = null;
 
+        // タイマー: PeerJS接続前から即時開始（iPadなど接続が遅い場合もUIが動く）
+        const startTime = Date.now();
+        mmExpansion = 0;
+        mmTimerInterval = setInterval(() => {
+            if (!mmMode) { clearInterval(mmTimerInterval); return; }
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const ss = String(elapsed % 60).padStart(2, '0');
+            document.getElementById('mm-waiting-timer').textContent = `待機中... ${mm}:${ss}`;
+            const msgEl = document.getElementById('mm-waiting-msg');
+            if (elapsed >= 30 && mmExpansion < 1 && mmStrength !== 'any') {
+                mmExpansion = 1;
+                if (msgEl) { msgEl.textContent = '条件を緩和して検索中...'; msgEl.style.display = 'block'; }
+                checkForMatch();
+            } else if (elapsed >= 60 && mmExpansion < 2 && mmStrength !== 'any') {
+                mmExpansion = 2;
+                if (msgEl) { msgEl.textContent = 'さらに条件を緩和して検索中...'; msgEl.style.display = 'block'; }
+                checkForMatch();
+            } else if (elapsed % 10 === 0 && elapsed > 0) {
+                // 10秒ごとにポーリング（Realtime が取りこぼした場合の補完）
+                checkForMatch();
+            }
+        }, 1000);
+
         const mmPeerId = 'mm-' + Math.random().toString(36).slice(2, 12);
         mmPeer = new Peer(mmPeerId, { debug: 0 });
 
@@ -5782,30 +5806,6 @@
 
             // 600秒ハードタイムアウト
             mmTimeoutId = setTimeout(() => onMatchmakingTimeout(), 600000);
-
-            // タイマー: 30s/60s で range 拡張、10秒ごとにポーリング
-            const startTime = Date.now();
-            mmExpansion = 0;
-            mmTimerInterval = setInterval(() => {
-                if (!mmMode) { clearInterval(mmTimerInterval); return; }
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-                const ss = String(elapsed % 60).padStart(2, '0');
-                document.getElementById('mm-waiting-timer').textContent = `待機中... ${mm}:${ss}`;
-                const msgEl = document.getElementById('mm-waiting-msg');
-                if (elapsed >= 30 && mmExpansion < 1 && mmStrength !== 'any') {
-                    mmExpansion = 1;
-                    if (msgEl) { msgEl.textContent = '条件を緩和して検索中...'; msgEl.style.display = 'block'; }
-                    checkForMatch();
-                } else if (elapsed >= 60 && mmExpansion < 2 && mmStrength !== 'any') {
-                    mmExpansion = 2;
-                    if (msgEl) { msgEl.textContent = 'さらに条件を緩和して検索中...'; msgEl.style.display = 'block'; }
-                    checkForMatch();
-                } else if (elapsed % 10 === 0 && elapsed > 0) {
-                    // 10秒ごとにポーリング（Realtime が取りこぼした場合の補完）
-                    checkForMatch();
-                }
-            }, 1000);
 
             // Realtime: 新規エントリを検知して即マッチ確認
             mmSubscription = sb.channel('mm-queue-' + currentUser.id)
@@ -5857,17 +5857,18 @@
     }
 
     async function checkForMatch() {
-        if (!mmMode || !currentUser || !mmQueueCreatedAt) return;
+        if (!mmMode || !currentUser || !mmQueueId) return;
         const myRating = currentUser.rating ?? 1500;
         const [rMin, rMax] = getMatchRatingRange(myRating, mmStrength, mmExpansion);
 
+        // UUID辞書順で接続役を決定: 自分より小さいIDの相手にのみ接続する（同時エントリ時の衝突回避）
         const { data } = await sb.from('matchmaking_queue')
             .select('*')
             .eq('status', 'waiting')
             .neq('user_id', currentUser.id)
             .gte('rating', rMin)
             .lte('rating', rMax)
-            .lt('created_at', mmQueueCreatedAt)
+            .lt('id', mmQueueId)
             .order('created_at', { ascending: true })
             .limit(1);
 
