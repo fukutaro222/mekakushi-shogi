@@ -89,7 +89,7 @@ Tables (SQL files in repo root, run in Supabase SQL Editor to create):
 |-------|----------|---------|
 | `profiles` | `migration.sql` | User nickname, rating, rank |
 | `games` | `games.sql` | Game records, kifu (jsonb), ratings |
-| `matchmaking_queue` | `matchmaking_queue.sql` | Auto-match waiting queue |
+| `matchmaking_queue` | `watch_room_migration.sql` | Auto-match waiting queue + `room_id` column for spectating (use this file, not `matchmaking_queue.sql`) |
 | `game_chat` | `game_chat.sql` | In-game chat messages |
 | `boards` / `board_replies` / `board_reports` | `boards.sql` | Bulletin board |
 | `chat_messages` | `chat_messages.sql` | (Legacy chat table) |
