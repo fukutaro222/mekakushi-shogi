@@ -5747,11 +5747,12 @@
         mmQueueCreatedAt = null;
 
         // 自分の過去の待機エントリをキャンセル（ブラウザ終了で残ったゴミエントリが誤マッチの原因になるため）
-        sb.from('matchmaking_queue')
-            .update({ status: 'cancelled' })
-            .eq('user_id', currentUser.id)
-            .eq('status', 'waiting')
-            .catch(e => console.warn('[MM] stale cleanup error:', e.message));
+        try {
+            await sb.from('matchmaking_queue')
+                .update({ status: 'cancelled' })
+                .eq('user_id', currentUser.id)
+                .eq('status', 'waiting');
+        } catch(e) { console.warn('[MM] stale cleanup error:', e.message); }
 
         // タイマー: PeerJS接続前から即時開始（iPadなど接続が遅い場合もUIが動く）
         clearInterval(mmTimerInterval); mmTimerInterval = null;
@@ -5856,7 +5857,7 @@
 
     async function cancelMatchmaking() {
         if (mmQueueId) {
-            await sb.from('matchmaking_queue').update({ status: 'cancelled' }).eq('id', mmQueueId).catch(() => {});
+            try { await sb.from('matchmaking_queue').update({ status: 'cancelled' }).eq('id', mmQueueId); } catch(e) {}
             mmQueueId = null;
         }
         mmCleanup(true);
@@ -5902,7 +5903,7 @@
 
         // Mark self as matched
         if (mmQueueId) {
-            await sb.from('matchmaking_queue').update({ status: 'matched' }).eq('id', mmQueueId).catch(() => {});
+            try { await sb.from('matchmaking_queue').update({ status: 'matched' }).eq('id', mmQueueId); } catch(e) {}
             mmQueueId = null;
         }
         mmCleanup(false); // keep mmPeer alive, just cancel subscription/timer
@@ -5939,8 +5940,8 @@
 
         // Cleanup MM queue entry
         if (mmQueueId) {
-            sb.from('matchmaking_queue').update({ status: 'matched' }).eq('id', mmQueueId).catch(() => {});
-            mmQueueId = null;
+            const _qid = mmQueueId; mmQueueId = null;
+            (async () => { try { await sb.from('matchmaking_queue').update({ status: 'matched' }).eq('id', _qid); } catch(e) {} })();
         }
         mmCleanup(false); // keep peer, cancel subscription/timer
 
@@ -5997,7 +5998,7 @@
                     showWatchUrl(watchUrl);
                     // 観戦一覧向けにroom_idをSupabaseへ登録
                     if (sb && setupSpectate) {
-                        sb.from('matchmaking_queue').update({ room_id: peer.id }).eq('peer_id', peer.id).catch(() => {});
+                        (async () => { try { await sb.from('matchmaking_queue').update({ room_id: peer.id }).eq('peer_id', peer.id); } catch(e) {} })();
                     }
                 }
             } else if (!isWatcher) {
@@ -8082,7 +8083,7 @@
         document.getElementById('mm-waiting-panel').classList.add('hidden');
         document.getElementById('board-panel').classList.add('hidden');
         boardCleanup();
-        if (mmMode) { mmCleanup(true); if (mmQueueId) { sb.from('matchmaking_queue').update({ status: 'cancelled' }).eq('id', mmQueueId).catch(()=>{}); mmQueueId = null; } }
+        if (mmMode) { mmCleanup(true); if (mmQueueId) { const _qid = mmQueueId; mmQueueId = null; (async () => { try { await sb.from('matchmaking_queue').update({ status: 'cancelled' }).eq('id', _qid); } catch(e) {} })(); } }
         blindMode = false; namedlessMode = false;
         hideModeToggles();
         hideBackBtn();
