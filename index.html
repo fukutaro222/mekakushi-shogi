@@ -5995,8 +5995,6 @@
                     showFlashBanner('対局開始！', 'start');
                     speakText('対局相手が見つかりました。対局を開始します');
                     chatStart(peer.id);
-                    const watchUrl = `${location.origin}${location.pathname}?watch=${peer.id}`;
-                    showWatchUrl(watchUrl);
                     // 観戦一覧向けにroom_idをSupabaseへ登録
                     if (sb && setupSpectate) {
                         (async () => { try { await sb.from('matchmaking_queue').update({ room_id: peer.id }).eq('peer_id', peer.id); } catch(e) {} })();
@@ -6783,9 +6781,6 @@
                             showFlashBanner('対局開始！', 'start');
                             speakText('相手が入室しました。対局を開始します');
                             chatStart(roomId);
-                            // 対局開始後に観戦URLを別途表示
-                            const watchUrl = `${location.origin}${location.pathname}?watch=${roomId}`;
-                            showWatchUrl(watchUrl);
                         }
                     }
                 } else if (!isWatcher) {
