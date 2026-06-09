@@ -7991,7 +7991,7 @@
             // 研究モード: 全駒種を表示 + ±ボタン
             for (const type of order) {
                 const cnt = hand[type] ?? 0;
-                const isGoteHand = _flippedHand ? (player === 'sente') : (player === 'gote');
+                const isGoteHand = (player === 'gote');
                 const handSeed = type.charCodeAt(0) + (isGoteHand ? 50 : 0);
                 const row = document.createElement('div');
                 row.className = 'research-hand-ctrl';
@@ -8037,7 +8037,7 @@
             const isSelected = selected?.kind === 'hand' && selected.type === type && currentTurn === player;
             const item = document.createElement('div');
             item.className = 'hand-piece-item' + (isSelected ? ' selected-hand' : '');
-            const isGoteHand = _flippedHand ? (player === 'sente') : (player === 'gote');
+            const isGoteHand = (player === 'gote');
             const handSeed = type.charCodeAt(0) + (isGoteHand ? 50 : 0);
             item.appendChild(makePieceSVG(type, false, isGoteHand, handSeed, isSelected));
             if (cnt > 1) {
