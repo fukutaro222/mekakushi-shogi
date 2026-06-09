@@ -5001,6 +5001,7 @@
 
     function executeMove(fromR, fromC, toR, toC, autoPromote = false, suppressDialog = false) {
         const piece = board[fromR][fromC];
+        if (!piece) { console.warn('[executeMove] piece is null at', fromR, fromC, '→', toR, toC); return; }
         const cap   = board[toR][toC];
         if (cap) {
             const hand = currentTurn === 'sente' ? senteHand : goteHand;
