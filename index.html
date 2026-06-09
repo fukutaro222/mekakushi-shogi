@@ -4692,6 +4692,7 @@
     let pvpDisconnectCountdown = 0;
     let pvpDisconnectInterval  = null;
     let pvpConnTimeoutId       = null;  // 接続確立タイムアウト（Safari等で遅い場合の安全弁）
+    let pvpHostPeerId          = null;  // GOTE用: マッチング時のホストpeer_id（切断時の自動再接続に使う）
 
     // ── 再戦 ──
     let rematchTimer = null;
@@ -5594,6 +5595,7 @@
             st.textContent = '相手が再戦を断りました。';
             document.getElementById('rematch-btn').disabled = false;
         } else if (data.type === 'game_restore') {
+            pvpCancelReconnectWait(false); // 再接続カウントダウンをクリア（以降は game_restore が再開処理を行う）
             // ホストから再接続時のゲーム状態を受信
             myRole = data.role ?? 'gote';
             pvpMode = true;
@@ -5674,13 +5676,14 @@
         if (promoted) showPromotionBanner(newRank);
     }
 
-    // 回線切れ: 30秒間再接続を待つ
+    // 回線切れ: 60秒間再接続を待つ
     function pvpStartReconnectWait() {
         if (pvpWaitingReconnect) return;
         pvpWaitingReconnect = true;
-        pvpDisconnectCountdown = 30;
+        pvpDisconnectCountdown = 60;
         stopClock();
-        showToast('接続が切れました。30秒間再接続を待っています...');
+        showToast('接続が切れました。60秒間再接続を待っています...');
+        if (pvpHostPeerId) _pvpAutoReconnect(); // GOTE: 自動再接続を試みる
         pvpDisconnectInterval = setInterval(() => {
             pvpDisconnectCountdown--;
             if (pvpDisconnectCountdown <= 0) {
@@ -5702,6 +5705,16 @@
             showToast('再接続しました。対局を再開します');
             if (clockEnabled && !gameOver) startClock();
         }
+    }
+
+    // GOTE用自動再接続（切断時にホストへ再度接続を試みる）
+    function _pvpAutoReconnect() {
+        if (!pvpHostPeerId || !pvpWaitingReconnect || !peer || gameOver) return;
+        try {
+            const c = peer.connect(pvpHostPeerId, { reliable: true });
+            pvpSetupConn(c);
+            c.on('error', e => console.error('[PvP] reconnect error:', e));
+        } catch(e) { console.error('[PvP] auto-reconnect failed:', e); }
     }
 
     // 対局中切断ハンドラ
@@ -6037,6 +6050,7 @@
         pvpSetDot('waiting');
 
         // Connect to host's peer
+        pvpHostPeerId = hostEntry.peer_id;
         const c = peer.connect(hostEntry.peer_id, { reliable: true });
         pvpSetupConn(c);
         c.on('error', e => pvpShowOverlay(`接続エラー: ${e}`, null));
@@ -6052,7 +6066,36 @@
     }
 
     function handleMatchmakingConnection(c) {
-        if (!mmMode) { try { c.close(); } catch(e){} return; }
+        if (!mmMode) {
+            // 再接続の場合: GOTE が切断後に再接続してきた
+            if (pvpWaitingReconnect && pvpMode && !gameOver) {
+                pvpSetupConn(c);
+                c.on('open', () => {
+                    c.send({
+                        type: 'game_restore',
+                        role: 'gote',
+                        hostNickname:  currentUser?.nickname ?? null,
+                        hostUserId:    currentUser?.id       ?? null,
+                        hostRating:    currentUser?.rating   ?? 1500,
+                        board:         board.map(row => row.map(cel => cel ? { ...cel } : null)),
+                        senteHand:     { ...senteHand },
+                        goteHand:      { ...goteHand },
+                        currentTurn,
+                        kifu:          [...kifu],
+                        senteTime,
+                        goteTime,
+                        senteInByoyomi,
+                        goteInByoyomi,
+                        senteByoyomiTime,
+                        goteByoyomiTime
+                    });
+                    pvpCancelReconnectWait(true);
+                });
+            } else {
+                try { c.close(); } catch(e){}
+            }
+            return;
+        }
         mmMode = false;
 
         // Transfer peer to global (game peer)
@@ -6081,6 +6124,7 @@
         c.on('open', () => { c.send({ type: 'classify' }); });
         let classified = false;
         let isWatcher  = false;
+        let pvpSetupDone = false; // pvpSetupConn 後は pvpSetupConn が追加した handler に委譲
         c.on('data', d => {
             if (!classified) {
                 classified = true;
@@ -6093,6 +6137,7 @@
                 } else {
                     // d.type === 'player'
                     pvpSetupConn(c);
+                    pvpSetupDone = true;
                     myRole = 'sente'; pvpMode = true;
                     blindMode = true;
                     c.send({
@@ -6119,7 +6164,8 @@
                         (async () => { try { await sb.from('matchmaking_queue').update({ room_id: peer.id }).eq('peer_id', peer.id); } catch(e) {} })();
                     }
                 }
-            } else if (!isWatcher) {
+            } else if (!isWatcher && !pvpSetupDone) {
+                // pvpSetupDone が true の場合は pvpSetupConn が追加した handler が処理する（二重呼び出し防止）
                 pvpOnData(d);
             }
         });
