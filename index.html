@@ -4691,6 +4691,7 @@
     let pvpWaitingReconnect    = false;
     let pvpDisconnectCountdown = 0;
     let pvpDisconnectInterval  = null;
+    let pvpConnTimeoutId       = null;  // 接続確立タイムアウト（Safari等で遅い場合の安全弁）
 
     // ── 再戦 ──
     let rematchTimer = null;
@@ -6039,6 +6040,15 @@
         const c = peer.connect(hostEntry.peer_id, { reliable: true });
         pvpSetupConn(c);
         c.on('error', e => pvpShowOverlay(`接続エラー: ${e}`, null));
+
+        // 接続確立タイムアウト（Safari/iPadでWebRTC確立が遅い場合の安全弁）
+        clearTimeout(pvpConnTimeoutId);
+        pvpConnTimeoutId = setTimeout(() => {
+            pvpConnTimeoutId = null;
+            if (!pvpMode && !gameOver) {
+                pvpShowOverlay('接続がタイムアウトしました。もう一度お試しください', null);
+            }
+        }, 45000);
     }
 
     function handleMatchmakingConnection(c) {
@@ -7178,6 +7188,7 @@
         ov.style.display = 'flex';
     }
     function pvpHideOverlay() {
+        clearTimeout(pvpConnTimeoutId); pvpConnTimeoutId = null;
         document.getElementById('pvp-overlay').style.display = 'none';
     }
     function pvpSetDot(state) {
@@ -9684,13 +9695,13 @@
         try {
             recognition.start();
             if (isIOS) {
-                // iOS: 5秒タイムアウトで自動終了
+                // iOS: 15秒タイムアウトで自動終了（Safari は認識が遅いため余裕を持たせる）
                 iosTimeoutId = setTimeout(() => {
                     if (micActive) {
-                        setVoiceText('タイムアウトしました', false);
+                        setVoiceText('音声認識がタイムアウトしました。もう一度マイクボタンを押してください', false);
                         stopListening();
                     }
-                }, 5000);
+                }, 15000);
             }
         } catch(e) {
             console.log('[Voice] start error', e);
