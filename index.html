@@ -3051,6 +3051,65 @@
             border-color: rgba(200,168,32,0.7);
             color: #d4b830;
         }
+        /* BGM音量スライダー */
+        .settings-vol-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(200,168,80,0.12);
+        }
+        .settings-vol-label {
+            flex: 0 0 72px;
+            color: rgba(230,200,100,0.75);
+            font-size: 13px;
+            letter-spacing: 0.08em;
+        }
+        .bgm-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 4px;
+            background: rgba(200,168,80,0.25);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .bgm-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: #c8a820;
+            border: 2px solid #7a5800;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+        }
+        .bgm-slider::-moz-range-thumb {
+            width: 16px; height: 16px;
+            border-radius: 50%;
+            background: #c8a820;
+            border: 2px solid #7a5800;
+            cursor: pointer;
+        }
+        .bgm-vol-pct {
+            width: 34px;
+            text-align: right;
+            color: #c8a820;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        /* 対局画面 voice-bar 内の音量ウィジェット */
+        #game-bgm-vol {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+        #game-bgm-vol span {
+            color: #806040;
+            font-size: 13px;
+        }
+        #game-bgm-vol .bgm-slider { width: 72px; flex: none; }
         #title-footer {
             margin-top: 8px;
             text-align: center;
@@ -3712,6 +3771,10 @@
     <div class="voice-bar">
         <button id="mic-btn" title="押している間、音声を認識します">🎤</button>
         <button id="voice-always-btn" title="常時音声認識のON/OFF">音声ON</button>
+        <div id="game-bgm-vol" title="BGM音量">
+            <span>♪</span>
+            <input type="range" id="game-bgm-slider" class="bgm-slider" min="0" max="100" value="70" step="1">
+        </div>
         <div class="voice-info">
             <div id="voice-label">ボタンを押しながら読み上げ（例：７六歩、２六飛）</div>
             <div id="voice-text"></div>
@@ -4329,6 +4392,28 @@
                 bgmEnabled,
                 val => { bgmEnabled = val; saveSettings(); if (!val) stopGameBGM(); }
             );
+            // BGM音量スライダー
+            {
+                const row = document.createElement('div');
+                row.className = 'settings-vol-row';
+                const lbl = document.createElement('div');
+                lbl.className = 'settings-vol-label';
+                lbl.textContent = 'BGM音量';
+                const slider = document.createElement('input');
+                slider.type = 'range'; slider.min = 0; slider.max = 100; slider.step = 1;
+                slider.value = Math.round(bgmVolume * 100);
+                slider.className = 'bgm-slider';
+                slider.id = 'settings-bgm-slider';
+                const pct = document.createElement('div');
+                pct.className = 'bgm-vol-pct';
+                pct.textContent = Math.round(bgmVolume * 100) + '%';
+                slider.addEventListener('input', () => {
+                    pct.textContent = slider.value + '%';
+                    setBgmVolume(slider.value / 100);
+                });
+                row.appendChild(lbl); row.appendChild(slider); row.appendChild(pct);
+                cont.appendChild(row);
+            }
             addRow('駒の種類',
                 [{ val: 1, text: '① 一文字' }, { val: 2, text: '② 二文字' }],
                 pieceStyle,
@@ -4520,13 +4605,14 @@
     let boardStyle   = 1;   // 1=通常 2=濃木目 3=グリーン 4=宇宙
 
     function saveSettings() {
-        try { localStorage.setItem('mekakushi_cfg', JSON.stringify({ soundEnabled, bgmEnabled, pieceStyle, boardStyle })); } catch {}
+        try { localStorage.setItem('mekakushi_cfg', JSON.stringify({ soundEnabled, bgmEnabled, bgmVolume, pieceStyle, boardStyle })); } catch {}
     }
     function loadSettings() {
         try {
             const s = JSON.parse(localStorage.getItem('mekakushi_cfg') || '{}');
             soundEnabled = s.soundEnabled ?? true;
             bgmEnabled   = s.bgmEnabled   ?? true;
+            bgmVolume    = s.bgmVolume    ?? 0.7;
             pieceStyle   = s.pieceStyle   ?? 1;
             boardStyle   = s.boardStyle   ?? 1;
         } catch {}
@@ -4922,8 +5008,31 @@
 
     // ── 対局BGM ──────────────────────────────────────────────────────────────
     let bgmEnabled = true;
+    let bgmVolume  = 0.7;   // 0.0〜1.0（localStorage で永続化）
     let _bgmNodes  = [];
     let _bgmTimer  = null;
+    let _bgmGain   = null;  // マスターゲインノード
+
+    function _getBgmDest(ac) {
+        if (!_bgmGain || _bgmGain.context !== ac) {
+            _bgmGain = ac.createGain();
+            _bgmGain.gain.value = bgmVolume;
+            _bgmGain.connect(ac.destination);
+        }
+        return _bgmGain;
+    }
+
+    function setBgmVolume(v) {
+        bgmVolume = Math.max(0, Math.min(1, v));
+        if (_bgmGain) _bgmGain.gain.value = bgmVolume;
+        saveSettings();
+        // 両スライダーを同期
+        const pct = Math.round(bgmVolume * 100);
+        const s1 = document.getElementById('game-bgm-slider');
+        const s2 = document.getElementById('settings-bgm-slider');
+        if (s1) s1.value = pct;
+        if (s2) { s2.value = pct; const p = s2.parentNode?.querySelector('.bgm-vol-pct'); if (p) p.textContent = pct + '%'; }
+    }
 
     // 日本五音音階 (ヨナ抜き短音階: D E F# A B)
     const _BGM_NOTES = [293.66, 329.63, 369.99, 440.00, 493.88, 587.33, 659.25, 739.99, 880.00];
@@ -4942,7 +5051,7 @@
         const osc  = ac.createOscillator();
         const osc2 = ac.createOscillator();
         const g    = ac.createGain();
-        osc.connect(g); osc2.connect(g); g.connect(ac.destination);
+        osc.connect(g); osc2.connect(g); g.connect(_getBgmDest(ac));
         osc.type  = 'triangle';
         osc2.type = 'sine';
         osc.frequency.value  = freq;
@@ -4963,7 +5072,7 @@
         // ドローン（低音持続）
         const drone = ac.createOscillator();
         const dg    = ac.createGain();
-        drone.connect(dg); dg.connect(ac.destination);
+        drone.connect(dg); dg.connect(_getBgmDest(ac));
         drone.type = 'sine';
         drone.frequency.value = _BGM_NOTES[0] * 0.5;
         dg.gain.setValueAtTime(0.03, loopStart);
@@ -9902,6 +10011,14 @@
     // ── 起動 ──────────────────────────────────────────────────────────────────
     loadSettings();
     applyBoardStyle();
+    // 対局画面の BGM 音量スライダー初期値とイベント
+    {
+        const gs = document.getElementById('game-bgm-slider');
+        if (gs) {
+            gs.value = Math.round(bgmVolume * 100);
+            gs.addEventListener('input', () => setBgmVolume(gs.value / 100));
+        }
+    }
     initBoard();
     renderLabels();
     renderAll();
