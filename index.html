@@ -5672,6 +5672,7 @@
         document.getElementById('mm-waiting-timer').textContent = '待機中... 00:00';
         document.getElementById('mm-waiting-msg').style.display = 'none';
         // 人数を即取得してから10秒ごとに更新
+        clearInterval(mmStatsInterval); mmStatsInterval = null;
         fetchMmStats();
         mmStatsInterval = setInterval(fetchMmStats, 10000);
         showBackBtn(() => cancelMatchmaking());
@@ -5745,7 +5746,15 @@
         mmQueueId = null;
         mmQueueCreatedAt = null;
 
+        // 自分の過去の待機エントリをキャンセル（ブラウザ終了で残ったゴミエントリが誤マッチの原因になるため）
+        sb.from('matchmaking_queue')
+            .update({ status: 'cancelled' })
+            .eq('user_id', currentUser.id)
+            .eq('status', 'waiting')
+            .catch(e => console.warn('[MM] stale cleanup error:', e.message));
+
         // タイマー: PeerJS接続前から即時開始（iPadなど接続が遅い場合もUIが動く）
+        clearInterval(mmTimerInterval); mmTimerInterval = null;
         const startTime = Date.now();
         mmExpansion = 0;
         mmTimerInterval = setInterval(() => {
@@ -5857,22 +5866,32 @@
     }
 
     async function checkForMatch() {
-        if (!mmMode || !currentUser || !mmQueueId) return;
+        if (!mmMode || !currentUser || !mmQueueId) {
+            console.log('[MM] checkForMatch skip:', { mmMode, userId: currentUser?.id, mmQueueId });
+            return;
+        }
         const myRating = currentUser.rating ?? 1500;
         const [rMin, rMax] = getMatchRatingRange(myRating, mmStrength, mmExpansion);
+        // 15分以上前のエントリは誤マッチの原因になるので除外
+        const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        console.log('[MM] checkForMatch:', { mmQueueId, rMin, rMax, mmStrength, mmExpansion, since: fifteenMinAgo });
 
         // UUID辞書順で接続役を決定: 自分より小さいIDの相手にのみ接続する（同時エントリ時の衝突回避）
-        const { data } = await sb.from('matchmaking_queue')
+        const { data, error } = await sb.from('matchmaking_queue')
             .select('*')
             .eq('status', 'waiting')
             .neq('user_id', currentUser.id)
             .gte('rating', rMin)
             .lte('rating', rMax)
             .lt('id', mmQueueId)
+            .gte('created_at', fifteenMinAgo)
             .order('created_at', { ascending: true })
             .limit(1);
 
+        console.log('[MM] checkForMatch result:', { found: data?.length ?? 0, error: error?.message, match: data?.[0]?.id });
+
         if (data && data.length > 0 && mmMode) {
+            console.log('[MM] → connectToHost:', data[0].id, 'peer:', data[0].peer_id);
             connectToHost(data[0]);
         }
     }
