@@ -1016,6 +1016,18 @@
             letter-spacing: 5px;
             margin-bottom: 28px;
         }
+        #rating-change-display {
+            display: none;
+            font-size: 15px;
+            color: #c8b07a;
+            letter-spacing: 2px;
+            margin-bottom: 18px;
+        }
+        #rating-change-display .rating-delta {
+            font-weight: bold;
+        }
+        #rating-change-display .rating-delta.positive { color: #72d672; }
+        #rating-change-display .rating-delta.negative { color: #e88080; }
         #practice-note {
             display: none;
             font-size: 12px;
@@ -3689,6 +3701,7 @@
     <div id="gameover-overlay">
         <div id="gameover-box">
             <div id="gameover-text"></div>
+            <div id="rating-change-display"></div>
             <div id="practice-note">練習対局のためレーティングは変動しません</div>
             <div id="rematch-status"></div>
             <button id="rematch-btn">再戦する</button>
@@ -5543,6 +5556,7 @@
             // 後手側: 先手から通知されたレーティングで自分のスコアを更新
             const newRating = data.goteNewRating;
             if (newRating != null && currentUser) {
+                const _ratingBeforeGote = currentUser.rating ?? 1200;
                 const newRank = ratingToRank(newRating);
                 const promoted = isPromotion(currentUser.rank ?? ratingToRank(currentUser.rating ?? 1200), newRank);
                 const newAchievement = (currentUser.rank_achievement ?? 0) + (promoted ? 1 : 0);
@@ -5553,6 +5567,7 @@
                         currentUser.rank_achievement = newAchievement;
                         updateUserBar();
                         if (promoted) showPromotionBanner(newRank);
+                        showRatingChange(_ratingBeforeGote, newRating);
                     });
             }
             // 後手側: 先手が保存したgame IDで棋譜共有ボタンを有効化
@@ -8101,6 +8116,7 @@
         pvpAnalyzeAsked = false;
         lastSavedGameId = null;
         document.getElementById('kifu-share-btn').style.display = 'none';
+        document.getElementById('rating-change-display').style.display = 'none';
         stopAlwaysListening();
         setTimeout(() => {
             document.getElementById('gameover-overlay').style.display = 'flex';
@@ -8110,11 +8126,15 @@
         lastWinnerRole = winnerRole;
         broadcastToWatchers();
         // 棋譜・レーティングをSupabaseに保存（先手または非PvPのみ）
+        const _ratingBefore = (pvpMode && currentUser) ? (currentUser.rating ?? 1200) : null;
         if (currentUser && winnerRole) {
             saveGame(winnerRole).then(id => {
                 if (id) {
                     lastSavedGameId = id;
                     document.getElementById('kifu-share-btn').style.display = '';
+                }
+                if (pvpMode && myRole === 'sente' && _ratingBefore != null && currentUser) {
+                    showRatingChange(_ratingBefore, currentUser.rating);
                 }
             }).catch(console.error);
         }
@@ -8171,6 +8191,16 @@
             setTimeout(() => banner.remove(), 400);
         }, 2800);
         speakText(`${newRank}に昇段しました！おめでとうございます`);
+    }
+
+    function showRatingChange(before, after) {
+        const el = document.getElementById('rating-change-display');
+        if (!el || before == null || after == null) return;
+        const delta = after - before;
+        const sign = delta >= 0 ? '+' : '';
+        const cls = delta >= 0 ? 'positive' : 'negative';
+        el.innerHTML = `レーティング: ${before} → ${after} <span class="rating-delta ${cls}">(${sign}${delta})</span>`;
+        el.style.display = 'block';
     }
 
     async function saveGame(winner) {
