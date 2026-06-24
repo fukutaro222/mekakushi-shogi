@@ -8049,6 +8049,8 @@
         const _flippedHand = ((!pvpMode && playerSide === 'gote') || (pvpMode && myRole === 'gote')) !== viewFlipped;
         if (researchMode) {
             // 研究モード: 全駒種を常時表示・無制限打ち・ドラッグ対応
+            // 駒の向き: 手前プレイヤーの駒は上向き、奥の駒は下向き（反転時に連動）
+            const dispIsGoteForPlayer = _flippedHand ? (player === 'sente') : (player === 'gote');
             for (const type of order) {
                 const cnt = hand[type] ?? 0;
                 const isGoteHand = (player === 'gote');
@@ -8057,7 +8059,7 @@
                 const item = document.createElement('div');
                 item.className = 'hand-piece-item' + (isSelected ? ' selected-hand' : '');
                 if (cnt <= 0) item.classList.add('rs-hand-item-dim');
-                item.appendChild(makePieceSVG(type, false, isGoteHand, handSeed, isSelected));
+                item.appendChild(makePieceSVG(type, false, dispIsGoteForPlayer, handSeed, isSelected));
                 if (cnt > 1) {
                     const badge = document.createElement('span');
                     badge.className = 'cnt'; badge.textContent = cnt;
@@ -8816,7 +8818,10 @@
         rsLongPressActive = false;
         researchHistory   = [];
         researchHistoryIdx = -1;
-        // 手のエリアの左右を標準配置にリセット
+        // 研究モードは常に先手視点（先手が手前）で開始
+        playerSide  = 'sente';
+        viewFlipped = false;
+        // 持ち駒エリアをCSSデフォルト（後手=左・先手=右）に戻す
         const shw = document.querySelector('.sente-hand-wrapper');
         const ghw = document.querySelector('.gote-hand-wrapper');
         if (shw) shw.style.order = '';
