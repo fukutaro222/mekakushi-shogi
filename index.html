@@ -2521,6 +2521,54 @@
             white-space: nowrap;
         }
         #rs-end-btn:hover { background: #301828; }
+        #rs-edit-btn {
+            background: #182838;
+            color: #80b8f0;
+            border: 1px solid #2a5888;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        #rs-edit-btn:hover { background: #223448; }
+        #rs-edit-done-btn {
+            display: none;
+            background: #183028;
+            color: #60e8c8;
+            border: 2px solid #30a880;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-family: inherit;
+            cursor: pointer;
+            white-space: nowrap;
+            font-weight: bold;
+        }
+        #rs-edit-done-btn:hover { background: #20483a; }
+        #research-bar.edit-active { border-color: #2a5888; background: #0a1828; }
+        .td-drag-over { outline: 2px solid rgba(100,180,255,0.8) !important; background: rgba(60,130,220,0.18) !important; }
+        .hand-drag-over { outline: 2px solid rgba(100,180,255,0.6); }
+        /* ── 編集モード：コンテキストメニュー拡張 ── */
+        #ctx-edit-section { display: none; }
+        .ctx-label { color: rgba(200,160,60,0.65); font-size: 11px; padding: 6px 16px 2px; letter-spacing: 1px; }
+        .ctx-type-grid { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 10px 8px; max-width: 200px; }
+        .ctx-type-btn {
+            background: #2a1e08;
+            color: #f0ddb0;
+            border: 1px solid rgba(139,106,26,0.5);
+            border-radius: 4px;
+            padding: 4px 7px;
+            font-size: 15px;
+            font-family: inherit;
+            cursor: pointer;
+            min-width: 34px;
+            text-align: center;
+            line-height: 1;
+        }
+        .ctx-type-btn:hover { background: #3a2e18; }
+        .ctx-type-btn.current { background: #4a3010; border-color: #c8a820; color: #ffe080; font-weight: bold; }
 
         /* ── 棋譜インポートボタン ── */
         #rs-reset-standard, #rs-reset-empty {
@@ -3618,6 +3666,8 @@
         <button id="rs-reset-empty">□ 駒なし</button>
         <button id="rs-save-btn">局面を保存</button>
         <button id="rs-import">棋譜インポート</button>
+        <button id="rs-edit-btn">✎ 盤面編集</button>
+        <button id="rs-edit-done-btn">✓ 編集完了</button>
         <button id="rs-end-btn">✕ 終了</button>
     </div>
 
@@ -3743,6 +3793,14 @@
 
     <!-- 駒コンテキストメニュー（研究モード） -->
     <div id="piece-context-menu">
+        <!-- 編集モード専用セクション -->
+        <div id="ctx-edit-section">
+            <div class="ctx-label">── 駒の種類 ──</div>
+            <div id="ctx-type-grid" class="ctx-type-grid"></div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" id="ctx-switch-player">先手/後手を切り替え</div>
+            <div class="ctx-sep"></div>
+        </div>
         <div class="ctx-item" id="ctx-promote">成り/不成を切り替え</div>
         <div class="ctx-sep"></div>
         <div class="ctx-item" id="ctx-to-sente">先手の持ち駒へ</div>
@@ -4495,6 +4553,8 @@
         document.getElementById('rs-reset-standard').addEventListener('click', () => { if (researchMode) startResearch('standard'); });
         document.getElementById('rs-reset-empty').addEventListener('click',    () => { if (researchMode) startResearch('empty'); });
         document.getElementById('rs-save-btn').addEventListener('click', rsSavePosition);
+        document.getElementById('rs-edit-btn').addEventListener('click', startEditMode);
+        document.getElementById('rs-edit-done-btn').addEventListener('click', stopEditMode);
         document.getElementById('rs-end-btn').addEventListener('click', stopResearch);
 
         // 駒コンテキストメニュー
@@ -4548,6 +4608,33 @@
             rsSaveHistory();
             board[r][c] = null;
             hideContextMenu(); renderAll(); updateResearchBar();
+        });
+        document.getElementById('ctx-switch-player').addEventListener('click', () => {
+            if (!rsContextCell) return;
+            const { r, c } = rsContextCell;
+            const p = board[r][c];
+            if (!p) { hideContextMenu(); return; }
+            rsSaveHistory();
+            board[r][c] = { ...p, player: p.player === 'sente' ? 'gote' : 'sente' };
+            hideContextMenu(); renderAll(); updateResearchBar();
+        });
+        // 手のエリアへのドロップ（編集モード）
+        ['sente-hand', 'gote-hand'].forEach(hid => {
+            const hel = document.getElementById(hid);
+            hel.addEventListener('dragover', (e) => {
+                if (!editMode || !editDragData) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                hel.classList.add('hand-drag-over');
+            });
+            hel.addEventListener('dragleave', () => hel.classList.remove('hand-drag-over'));
+            hel.addEventListener('drop', (e) => {
+                if (!editMode) return;
+                e.preventDefault();
+                hel.classList.remove('hand-drag-over');
+                const toPlayer = hid === 'sente-hand' ? 'sente' : 'gote';
+                handleHandDrop(toPlayer);
+            });
         });
         // コンテキストメニュー外クリックで閉じる
         document.addEventListener('click', (e) => {
@@ -4666,6 +4753,9 @@
     let rsLongPressTimer  = null;
     let rsLongPressActive = false;
     const RS_POSITIONS_KEY = 'mekakushi_research_positions';
+    // ── 編集モード ──
+    let editMode      = false;
+    let editDragData  = null;  // ドラッグ中の駒情報 {from,r,c} or {from,player,type}
 
     // ── 感想戦 ──
     let analyzeMode      = false;
@@ -7957,6 +8047,33 @@
                     }, { passive: true });
                     td.addEventListener('touchmove', () => { clearTimeout(rsLongPressTimer); rsLongPressTimer = null; }, { passive: true });
                     td.addEventListener('touchend',  () => { clearTimeout(rsLongPressTimer); rsLongPressTimer = null; });
+                    // 編集モード: ドラッグ&ドロップ
+                    if (editMode) {
+                        if (p) {
+                            td.setAttribute('draggable', 'true');
+                            td.style.cursor = 'grab';
+                            td.addEventListener('dragstart', (e) => {
+                                if (!board[r][c]) { e.preventDefault(); return; }
+                                editDragData = { from: 'board', r, c };
+                                e.dataTransfer.effectAllowed = 'move';
+                                e.dataTransfer.setData('text/plain', 'editpiece');
+                                setTimeout(() => { td.style.opacity = '0.35'; }, 0);
+                            });
+                            td.addEventListener('dragend', () => { td.style.opacity = ''; });
+                        }
+                        td.addEventListener('dragover', (e) => {
+                            if (!editDragData) return;
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            td.classList.add('td-drag-over');
+                        });
+                        td.addEventListener('dragleave', () => td.classList.remove('td-drag-over'));
+                        td.addEventListener('drop', (e) => {
+                            e.preventDefault();
+                            td.classList.remove('td-drag-over');
+                            handleBoardDrop(r, c);
+                        });
+                    }
                 }
                 tr.appendChild(td);
             }
@@ -8015,6 +8132,16 @@
                 pieceBtn.title = cnt > 0 ? `${cnt}枚` : '';
                 pieceBtn.appendChild(makePieceSVG(type, false, isGoteHand, handSeed, false));
                 if (cnt > 0) pieceBtn.addEventListener('click', () => onHandPieceClick(type, player));
+                // 編集モード: 持ち駒をドラッグ可能に
+                if (editMode && cnt > 0) {
+                    pieceBtn.setAttribute('draggable', 'true');
+                    pieceBtn.style.cursor = 'grab';
+                    pieceBtn.addEventListener('dragstart', (e) => {
+                        editDragData = { from: 'hand', player, type };
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', 'editpiece');
+                    });
+                }
                 const cntSpan = document.createElement('span');
                 cntSpan.className = 'rs-hand-cnt';
                 cntSpan.textContent = cnt;
@@ -8774,6 +8901,8 @@
 
     function startResearch(initType, savedPos = null) {
         researchMode  = true;
+        editMode      = false;
+        editDragData  = null;
         gameOver      = false;
         blindMode     = false;
         namedlessMode = false;
@@ -8783,6 +8912,9 @@
         rsLongPressActive = false;
         researchHistory   = [];
         researchHistoryIdx = -1;
+        document.getElementById('rs-edit-btn').style.display = '';
+        document.getElementById('rs-edit-done-btn').style.display = 'none';
+        document.getElementById('research-bar').classList.remove('edit-active');
 
         const savedClock = clockEnabled;
         clockEnabled = false;
@@ -8812,13 +8944,99 @@
 
     function stopResearch() {
         researchMode      = false;
+        editMode          = false;
+        editDragData      = null;
         researchHistory   = [];
         researchHistoryIdx = -1;
         rsContextCell     = null;
         hideContextMenu();
         document.getElementById('research-bar').classList.remove('active');
+        document.getElementById('research-bar').classList.remove('edit-active');
+        document.getElementById('rs-edit-btn').style.display = '';
+        document.getElementById('rs-edit-done-btn').style.display = 'none';
         document.getElementById('resign-btn').style.display = '';
         showTitleScreen();
+    }
+
+    // ── 編集モード ────────────────────────────────────────────────────────────
+
+    function startEditMode() {
+        if (!researchMode) return;
+        editMode = true;
+        editDragData = null;
+        document.getElementById('rs-edit-btn').style.display = 'none';
+        document.getElementById('rs-edit-done-btn').style.display = '';
+        document.getElementById('research-bar').classList.add('edit-active');
+        renderAll();
+    }
+
+    function stopEditMode() {
+        editMode = false;
+        editDragData = null;
+        document.getElementById('rs-edit-btn').style.display = '';
+        document.getElementById('rs-edit-done-btn').style.display = 'none';
+        document.getElementById('research-bar').classList.remove('edit-active');
+        rsSaveHistory();
+        renderAll();
+    }
+
+    function handleBoardDrop(toR, toC) {
+        const data = editDragData;
+        editDragData = null;
+        if (!data) return;
+        rsSaveHistory();
+        const baseTypes = { p_pawn:'pawn', p_lance:'lance', p_knight:'knight', p_silver:'silver', p_bishop:'bishop', p_rook:'rook' };
+        if (data.from === 'board') {
+            const { r: fr, c: fc } = data;
+            if (fr === toR && fc === toC) return;
+            // ソースとデスティネーションを入れ替え（スワップ）
+            const tmp = board[toR][toC];
+            board[toR][toC] = board[fr][fc];
+            board[fr][fc] = tmp;
+        } else if (data.from === 'hand') {
+            const srcHand = data.player === 'sente' ? senteHand : goteHand;
+            if ((srcHand[data.type] ?? 0) <= 0) return;
+            srcHand[data.type]--;
+            if (srcHand[data.type] <= 0) delete srcHand[data.type];
+            const existing = board[toR][toC];
+            board[toR][toC] = { type: data.type, player: data.player, promoted: false };
+            // 元の駒があれば持ち駒エリアへ（成り駒は不成に戻す）
+            if (existing) {
+                const base = existing.promoted ? (baseTypes[existing.type] ?? existing.type) : existing.type;
+                if (base !== 'king') {
+                    const destHand = existing.player === 'sente' ? senteHand : goteHand;
+                    destHand[base] = (destHand[base] ?? 0) + 1;
+                }
+            }
+        }
+        renderAll(); updateResearchBar();
+    }
+
+    function handleHandDrop(toPlayer) {
+        const data = editDragData;
+        editDragData = null;
+        if (!data) return;
+        rsSaveHistory();
+        const baseTypes = { p_pawn:'pawn', p_lance:'lance', p_knight:'knight', p_silver:'silver', p_bishop:'bishop', p_rook:'rook' };
+        if (data.from === 'board') {
+            const { r, c } = data;
+            const piece = board[r][c];
+            if (!piece) return;
+            const base = piece.promoted ? (baseTypes[piece.type] ?? piece.type) : piece.type;
+            if (base === 'king') return; // 王は持ち駒にできない
+            board[r][c] = null;
+            const hand = toPlayer === 'sente' ? senteHand : goteHand;
+            hand[base] = (hand[base] ?? 0) + 1;
+        } else if (data.from === 'hand') {
+            if (data.player === toPlayer) return; // 同じ持ち駒エリアへは不要
+            const fromHand = data.player === 'sente' ? senteHand : goteHand;
+            const toHand   = toPlayer   === 'sente' ? senteHand : goteHand;
+            if ((fromHand[data.type] ?? 0) <= 0) return;
+            fromHand[data.type]--;
+            if (fromHand[data.type] <= 0) delete fromHand[data.type];
+            toHand[data.type] = (toHand[data.type] ?? 0) + 1;
+        }
+        renderAll(); updateResearchBar();
     }
 
     // ── 研究モード：コンテキストメニュー ──────────────────────────────────────
@@ -8828,21 +9046,64 @@
         const p = board[r][c];
         if (!p) return;
         rsContextCell = { r, c };
-        const menu = document.getElementById('piece-context-menu');
-        // 成り切り替え: 金・王以外
-        const canToggle = !['king', 'gold'].includes(p.type) && !p.type.startsWith('p_');
+        const menu      = document.getElementById('piece-context-menu');
         const promItem  = document.getElementById('ctx-promote');
-        if (p.promoted || !canToggle) {
-            promItem.style.display = p.promoted ? '' : 'none';
-            promItem.textContent   = p.promoted ? '不成に変更' : '';
+        const editSec   = document.getElementById('ctx-edit-section');
+        const typeGrid  = document.getElementById('ctx-type-grid');
+
+        if (editMode) {
+            // 編集モード: 駒種選択グリッド + 先後切替を表示
+            editSec.style.display = '';
+            promItem.style.display = 'none';
+            typeGrid.innerHTML = '';
+            const baseTypes = { p_pawn:'pawn', p_lance:'lance', p_knight:'knight', p_silver:'silver', p_bishop:'bishop', p_rook:'rook' };
+            const promTypes = { pawn:'p_pawn', lance:'p_lance', knight:'p_knight', silver:'p_silver', bishop:'p_bishop', rook:'p_rook' };
+            const currentBase = p.promoted ? (baseTypes[p.type] ?? p.type) : p.type;
+            const allTypes = [
+                { base:'pawn',   kanji:'歩', prom:false }, { base:'lance',  kanji:'香', prom:false },
+                { base:'knight', kanji:'桂', prom:false }, { base:'silver', kanji:'銀', prom:false },
+                { base:'gold',   kanji:'金', prom:false }, { base:'bishop', kanji:'角', prom:false },
+                { base:'rook',   kanji:'飛', prom:false }, { base:'king',   kanji:'王', prom:false },
+                { base:'pawn',   kanji:'と', prom:true  }, { base:'lance',  kanji:'杏', prom:true  },
+                { base:'knight', kanji:'圭', prom:true  }, { base:'silver', kanji:'全', prom:true  },
+                { base:'bishop', kanji:'馬', prom:true  }, { base:'rook',   kanji:'龍', prom:true  },
+            ];
+            allTypes.forEach(({ base, kanji, prom }) => {
+                const btn = document.createElement('button');
+                btn.className = 'ctx-type-btn';
+                btn.textContent = kanji;
+                const isCurrent = base === currentBase && prom === p.promoted;
+                if (isCurrent) btn.classList.add('current');
+                btn.addEventListener('mousedown', (e) => e.stopPropagation());
+                btn.addEventListener('click', () => {
+                    if (!rsContextCell) return;
+                    const { r: cr, c: cc } = rsContextCell;
+                    const piece = board[cr][cc];
+                    if (!piece) { hideContextMenu(); return; }
+                    rsSaveHistory();
+                    const newType = prom ? (promTypes[base] ?? base) : base;
+                    board[cr][cc] = { ...piece, type: newType, promoted: prom };
+                    hideContextMenu(); renderAll(); updateResearchBar();
+                });
+                typeGrid.appendChild(btn);
+            });
         } else {
-            promItem.style.display = '';
-            promItem.textContent   = '成りに変更';
+            editSec.style.display = 'none';
+            // 成り切り替え: 金・王以外
+            const canToggle = !['king', 'gold'].includes(p.type) && !p.type.startsWith('p_');
+            if (p.promoted || !canToggle) {
+                promItem.style.display = p.promoted ? '' : 'none';
+                promItem.textContent   = p.promoted ? '不成に変更' : '';
+            } else {
+                promItem.style.display = '';
+                promItem.textContent   = '成りに変更';
+            }
         }
         menu.style.display = 'block';
         const vw = window.innerWidth, vh = window.innerHeight;
-        menu.style.left = `${Math.min(x + 4, vw - 165)}px`;
-        menu.style.top  = `${Math.min(y + 4, vh - 160)}px`;
+        const menuH = editMode ? 260 : 180;
+        menu.style.left = `${Math.min(x + 4, vw - 210)}px`;
+        menu.style.top  = `${Math.min(y + 4, vh - menuH)}px`;
     }
 
     function hideContextMenu() {
