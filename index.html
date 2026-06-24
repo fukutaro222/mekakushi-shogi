@@ -54,14 +54,14 @@
         .sente-hand-wrapper {
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
+            justify-content: flex-end;
             order: 3;
         }
 
         .gote-hand-wrapper {
             display: flex;
             flex-direction: column;
-            justify-content: flex-end;
+            justify-content: flex-start;
             order: 1;
         }
 
@@ -7299,17 +7299,19 @@
             if (boardLayoutEl) boardLayoutEl.style.order = '';
             if (goteRow)      goteRow.style.order      = '';
         }
-        // 持ち駒エリアの左右を視点に合わせて更新
-        // 先手視点: 後手=LEFT(1), 先手=RIGHT(3)
-        // 後手視点: 先手=LEFT(1), 後手=RIGHT(3)
+        // 持ち駒エリアの左右・上下を視点に合わせて更新
+        // 手前プレイヤー: 右列(order:3) + 下寄せ(flex-end) → 右下
+        // 奥プレイヤー:   左列(order:1) + 上寄せ(flex-start) → 左上
         const senteHW = document.querySelector('.sente-hand-wrapper');
         const goteHW  = document.querySelector('.gote-hand-wrapper');
         if (iAmSente) {
-            if (goteHW)  goteHW.style.order  = '1';
-            if (senteHW) senteHW.style.order = '3';
+            // 先手が手前: 先手=右下, 後手=左上
+            if (goteHW)  { goteHW.style.order  = '1'; goteHW.style.justifyContent  = 'flex-start'; }
+            if (senteHW) { senteHW.style.order = '3'; senteHW.style.justifyContent = 'flex-end'; }
         } else {
-            if (senteHW) senteHW.style.order = '1';
-            if (goteHW)  goteHW.style.order  = '3';
+            // 後手が手前: 後手=右下, 先手=左上
+            if (senteHW) { senteHW.style.order = '1'; senteHW.style.justifyContent = 'flex-start'; }
+            if (goteHW)  { goteHW.style.order  = '3'; goteHW.style.justifyContent  = 'flex-end'; }
         }
 
         // ラベル: gote-label は DOM上は「後手row」に属する
@@ -8821,11 +8823,11 @@
         // 研究モードは常に先手視点（先手が手前）で開始
         playerSide  = 'sente';
         viewFlipped = false;
-        // 持ち駒エリアをCSSデフォルト（後手=左・先手=右）に戻す
+        // 持ち駒エリアをCSSデフォルト（先手=右下・後手=左上）に戻す
         const shw = document.querySelector('.sente-hand-wrapper');
         const ghw = document.querySelector('.gote-hand-wrapper');
-        if (shw) shw.style.order = '';
-        if (ghw) ghw.style.order = '';
+        if (shw) { shw.style.order = ''; shw.style.justifyContent = ''; }
+        if (ghw) { ghw.style.order = ''; ghw.style.justifyContent = ''; }
 
         const savedClock = clockEnabled;
         clockEnabled = false;
