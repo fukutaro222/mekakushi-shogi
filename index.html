@@ -4708,6 +4708,7 @@
     let pvpWaitingReconnect    = false;
     let pvpDisconnectCountdown = 0;
     let pvpDisconnectInterval  = null;
+    let pvpReconnectRetryId    = null;  // 10秒ごとの再接続リトライタイマー
     let pvpConnTimeoutId       = null;  // 接続確立タイムアウト（Safari等で遅い場合の安全弁）
     let pvpHostPeerId          = null;  // GOTE用: マッチング時のホストpeer_id（切断時の自動再接続に使う）
 
@@ -5695,21 +5696,30 @@
         if (promoted) showPromotionBanner(newRank);
     }
 
-    // 回線切れ: 60秒間再接続を待つ
+    // 回線切れ: 120秒間再接続を待つ
     function pvpStartReconnectWait() {
         if (pvpWaitingReconnect) return;
         pvpWaitingReconnect = true;
-        pvpDisconnectCountdown = 60;
+        pvpDisconnectCountdown = 120;
         stopClock();
-        showToast('接続が切れました。60秒間再接続を待っています...');
-        if (pvpHostPeerId) _pvpAutoReconnect(); // GOTE: 自動再接続を試みる
+        showToast('接続が切れました。再接続を試みています...');
+        if (pvpHostPeerId) _pvpAutoReconnect();
+        _pvpStartCountdown();
+        // 10秒ごとに再接続リトライ（GOTE側）
+        pvpReconnectRetryId = setInterval(() => {
+            if (pvpHostPeerId && pvpWaitingReconnect && !gameOver) _pvpAutoReconnect();
+        }, 10000);
+    }
+
+    function _pvpStartCountdown() {
+        clearInterval(pvpDisconnectInterval);
         pvpDisconnectInterval = setInterval(() => {
             pvpDisconnectCountdown--;
             if (pvpDisconnectCountdown <= 0) {
                 pvpCancelReconnectWait(false);
                 pvpHandleDisconnect();
             } else {
-                showToast(`接続が切れました。${pvpDisconnectCountdown}秒間再接続を待っています...`);
+                showToast(`接続が切れました。再接続を待っています... (${pvpDisconnectCountdown}秒)`);
             }
         }, 1000);
     }
@@ -5718,6 +5728,8 @@
         if (!pvpWaitingReconnect) return;
         clearInterval(pvpDisconnectInterval);
         pvpDisconnectInterval = null;
+        clearInterval(pvpReconnectRetryId);
+        pvpReconnectRetryId = null;
         pvpWaitingReconnect = false;
         pvpDisconnectCountdown = 0;
         if (resume) {
@@ -10216,6 +10228,19 @@
     renderLabels();
     renderAll();
     window.addEventListener('resize', () => drawBoardGrain());
+
+    // Safari/iPad: バックグラウンド移行時に切断カウントダウンを一時停止し、
+    // フォアグラウンド復帰時に即座に再接続を試みる
+    document.addEventListener('visibilitychange', () => {
+        if (!pvpMode || gameOver || !pvpWaitingReconnect) return;
+        if (document.hidden) {
+            clearInterval(pvpDisconnectInterval);
+            pvpDisconnectInterval = null;
+        } else {
+            if (pvpHostPeerId) _pvpAutoReconnect();
+            _pvpStartCountdown();
+        }
+    });
     // フォントロード完了後に駒を再描画（Canvas描画はCSSフォントを自動待機しないため）
     document.fonts.ready.then(() => { renderBoard(); renderHands(); });
     // 盤面テクスチャをプリロード（ロード完了後に盤を再描画）
