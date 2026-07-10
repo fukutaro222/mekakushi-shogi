@@ -1,0 +1,25 @@
+name: Supabase Weekly Ping
+
+on:
+  schedule:
+    # 毎週月曜日 00:00 UTC = 09:00 JST
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://rmupcpezaodhkqorvuvc.supabase.co/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            --max-time 30)
+          echo "HTTP Status: $STATUS"
+          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]; then
+            echo "Supabase is alive."
+          else
+            echo "Unexpected status: $STATUS"
+            exit 1
+          fi
