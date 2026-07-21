@@ -15,8 +15,11 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            /* 盤マス幅: 画面幅に応じて36〜62pxで自動調整 */
-            --cell: clamp(36px, calc((100vw - 56px) / 9), 62px);
+            /* 盤マス幅: 画面幅・高さ両方に応じて32〜62pxで自動調整 */
+            --cell: min(
+                clamp(32px, calc((100vw - 300px) / 9), 62px),
+                clamp(32px, calc((100vh - 200px) / 9), 62px)
+            );
         }
 
         body {
@@ -26,7 +29,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 24px 16px;
+            padding: 12px 8px;
         }
 
         h1 {
@@ -256,7 +259,6 @@
             border-radius: 6px;
             padding: 10px 12px;
             min-width: 108px;
-            min-height: 200px;
             box-shadow:
                 inset 0 0 30px rgba(120, 75, 0, 0.2),
                 0 4px 14px rgba(0,0,0,0.45);
@@ -318,39 +320,34 @@
             pointer-events: none;
         }
 
-        /* ── 音声操作バー ── */
-        .voice-bar {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-top: 20px;
-            background: #1e0e04;
-            padding: 12px 20px;
-            border-radius: 8px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.45);
-            width: 100%;
-            max-width: 640px;
+        /* ── フローティングマイクボタン ── */
+        #mic-float {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 900;
         }
 
         #mic-btn {
-            width: 54px;
-            height: 54px;
+            width: 56px;
+            height: 56px;
             border-radius: 50%;
-            border: 3px solid #6a3a10;
-            background: #4a2008;
+            border: 3px solid #8a5020;
+            background: rgba(74, 32, 8, 0.92);
             color: #f0ddb0;
-            font-size: 22px;
+            font-size: 24px;
             cursor: pointer;
-            flex-shrink: 0;
             user-select: none;
             -webkit-user-select: none;
-            transition: background 0.15s;
+            transition: background 0.15s, box-shadow 0.15s;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.65), 0 0 0 1px rgba(200,168,32,0.2);
+            touch-action: none;
         }
 
-        #mic-btn:hover { background: #6a3010; }
+        #mic-btn:hover { background: rgba(106, 48, 16, 0.95); }
 
         #mic-btn.active {
             background: #cc2200;
@@ -359,25 +356,34 @@
         }
 
         @keyframes mic-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(204,34,0,0.5); }
-            50%       { box-shadow: 0 0 0 12px rgba(204,34,0,0); }
+            0%, 100% { box-shadow: 0 0 0 0 rgba(204,34,0,0.55); }
+            50%       { box-shadow: 0 0 0 14px rgba(204,34,0,0); }
+        }
+
+        /* ── 音声操作バー（BGM + 認識テキスト） ── */
+        .voice-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 6px;
+            background: #1e0e04;
+            padding: 5px 14px;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+            width: 100%;
+            max-width: 640px;
         }
 
         .voice-info { flex: 1; min-width: 0; }
 
-        #voice-label {
-            font-size: 11px;
-            color: #806040;
-            margin-bottom: 4px;
-            letter-spacing: 1px;
-        }
+        #voice-label { display: none; }
 
         #voice-text {
-            font-size: 18px;
+            font-size: 14px;
             font-weight: bold;
             color: #f0ddb0;
-            min-height: 26px;
-            letter-spacing: 2px;
+            min-height: 20px;
+            letter-spacing: 1px;
             word-break: break-all;
             transition: opacity 0.15s;
         }
@@ -385,7 +391,7 @@
         .voice-manual {
             display: flex;
             gap: 6px;
-            margin-top: 6px;
+            margin-top: 4px;
         }
 
         #voice-input {
@@ -1559,19 +1565,45 @@
             100% { opacity: 0; transform: scale(1.06); }
         }
 
-        /* ── スマホ対応 ── */
+        /* ── スマホ/タブレット対応 ── */
         @media (max-width: 959px) {
+            :root {
+                /* 縦長画面: vw と vh の小さい方でセルサイズを決定 */
+                --cell: min(
+                    clamp(30px, calc((100vw - 16px) / 9), 54px),
+                    clamp(30px, calc((100vh - 260px) / 9), 54px)
+                );
+            }
             .game-area {
                 flex-direction: column;
                 align-items: center;
-                gap: 10px;
+                gap: 6px;
             }
             .gote-hand-wrapper  { order: 1; width: min(100%, 560px); }
             .board-section      { order: 2; }
             .sente-hand-wrapper { order: 3; width: min(100%, 560px); }
-            .kifu-wrapper       { order: 4; width: min(100%, 560px); }
-            .hand { min-height: auto; width: 100%; }
-            .kifu-panel { max-height: 80px; width: 100%; }
+            .kifu-wrapper       { order: 4; width: min(100%, 560px); display: none; }
+            /* 持ち駒を横並びコンパクト表示 */
+            .hand {
+                width: 100%;
+                padding: 4px 8px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                min-height: 0;
+            }
+            .hand h3 {
+                white-space: nowrap;
+                font-size: 10px;
+                margin-bottom: 0;
+                padding-bottom: 0;
+                border-bottom: none;
+                padding-right: 6px;
+                border-right: 1px solid rgba(255,220,120,0.35);
+            }
+            .hand-grid { flex: 1; flex-wrap: wrap; }
+            .voice-manual { display: none; }
+            #mic-float { bottom: 12px; right: 12px; }
         }
 
         /* ── 認証オーバーレイ ── */
@@ -3734,9 +3766,13 @@
         </div>
     </div>
 
-    <!-- 音声操作バー -->
-    <div class="voice-bar">
+    <!-- フローティングマイクボタン -->
+    <div id="mic-float">
         <button id="mic-btn" title="押している間、音声を認識します">🎤</button>
+    </div>
+
+    <!-- 音声操作バー（BGM + 認識テキスト） -->
+    <div class="voice-bar">
         <div id="game-bgm-vol" title="BGM音量">
             <span>♪</span>
             <input type="range" id="game-bgm-slider" class="bgm-slider" min="0" max="100" value="70" step="1">
