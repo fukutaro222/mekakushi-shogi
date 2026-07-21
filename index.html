@@ -415,28 +415,6 @@
 
         #voice-input-btn:hover { background: #6a3010; }
 
-        #voice-always-btn {
-            background: #1a3010;
-            color: #80c060;
-            border: 2px solid #3a6020;
-            border-radius: 20px;
-            padding: 6px 14px;
-            font-size: 12px;
-            font-weight: bold;
-            cursor: pointer;
-            flex-shrink: 0;
-            white-space: nowrap;
-            transition: background 0.15s, border-color 0.15s;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        #voice-always-btn:hover { background: #2a5020; }
-        #voice-always-btn.active {
-            background: #7a1000;
-            color: #ffbb99;
-            border-color: #dd3300;
-            animation: mic-pulse 1.5s ease-in-out infinite;
-        }
 
         /* ── 手番表示 ── */
         .turn-indicator {
@@ -3759,7 +3737,6 @@
     <!-- 音声操作バー -->
     <div class="voice-bar">
         <button id="mic-btn" title="押している間、音声を認識します">🎤</button>
-        <button id="voice-always-btn" title="常時音声認識のON/OFF">音声ON</button>
         <div id="game-bgm-vol" title="BGM音量">
             <span>♪</span>
             <input type="range" id="game-bgm-slider" class="bgm-slider" min="0" max="100" value="70" step="1">
@@ -8165,7 +8142,7 @@
         lastSavedGameId = null;
         document.getElementById('kifu-share-btn').style.display = 'none';
         document.getElementById('rating-change-display').style.display = 'none';
-        stopAlwaysListening();
+        stopListening();
         setTimeout(() => {
             document.getElementById('gameover-overlay').style.display = 'flex';
         }, 1400);
@@ -8314,7 +8291,7 @@
 
 
     function showTitleScreen() {
-        stopAlwaysListening();
+        stopListening();
         const ts = document.getElementById('title-screen');
         ts.classList.remove('fade-out', 'hidden');
         document.getElementById('title-content').classList.remove('hidden');
@@ -9794,7 +9771,6 @@
     const DIR_KANJI = { right:'右', left:'左', straight:'直', up:'上', down:'引', lateral:'寄' };
 
     let micActive     = false;
-    let voiceAlwaysOn = false;
     let recognition   = null;
     let lastVoiceText = '';   // 最後に認識されたテキスト（interim含む）
     let moveExecuted  = false; // 1回の発話で二重実行を防ぐフラグ
@@ -9832,38 +9808,18 @@
             clearTimeout(iosTimeoutId);
             if (event.error === 'not-allowed') {
                 setVoiceText('マイクの使用が許可されていません', false);
-                voiceAlwaysOn = false;
-                updateVoiceAlwaysBtn();
                 micActive = false;
                 updateMicBtn();
                 return;
             }
             if (event.error !== 'no-speech') setVoiceText(`エラー: ${event.error}`, false);
-            if (!voiceAlwaysOn) {
-                micActive = false;
-                updateMicBtn();
-            }
-            // voiceAlwaysOn の場合は onend が再起動を処理する
+            micActive = false;
+            updateMicBtn();
         };
 
         recognition.onend = () => {
             clearTimeout(iosTimeoutId);
-            if (voiceAlwaysOn) {
-                // 常時ONモード: final が来なかった場合に interim テキストをフォールバック処理
-                if (!moveExecuted && lastVoiceText) tryVoiceMove(lastVoiceText);
-                moveExecuted  = false;
-                lastVoiceText = '';
-                setVoiceText('待機中…', true);
-                setTimeout(() => {
-                    if (!voiceAlwaysOn) return;
-                    try { recognition.start(); }
-                    catch(e) {
-                        setVoiceText('再起動エラー', false);
-                        voiceAlwaysOn = false;
-                        updateVoiceAlwaysBtn();
-                    }
-                }, isIOS ? 600 : 200);
-            } else if (!isIOS && micActive) {
+            if (!isIOS && micActive) {
                 // 非 iOS: ボタン押下中は再起動してホールド継続
                 try { recognition.start(); }
                 catch(e) { micActive = false; updateMicBtn(); }
@@ -9879,8 +9835,6 @@
     function startListening() {
         if (!recognition) { setVoiceText('このブラウザは音声認識に未対応です', false); return; }
         if (micActive) return;
-        // 常時ONが動いていれば一時停止して引き継ぐ
-        if (voiceAlwaysOn) { voiceAlwaysOn = false; updateVoiceAlwaysBtn(); }
         micActive     = true;
         moveExecuted  = false;
         lastVoiceText = '';
@@ -9926,42 +9880,6 @@
         document.getElementById('mic-btn')?.classList.toggle('active', micActive);
     }
 
-    function startAlwaysListening() {
-        if (!recognition) { setVoiceText('このブラウザは音声認識に未対応です', false); return; }
-        // ホールドモードが動いていれば停止
-        if (micActive) { micActive = false; try { recognition.stop(); } catch(e) {} }
-        voiceAlwaysOn = true;
-        updateVoiceAlwaysBtn();
-        if (!localStorage.getItem('voiceMicNoted')) {
-            localStorage.setItem('voiceMicNoted', '1');
-            showToast('マイクの使用を許可してください（ブラウザの確認画面が表示されます）');
-        }
-        moveExecuted  = false;
-        lastVoiceText = '';
-        setVoiceText('待機中…', true);
-        try { recognition.start(); }
-        catch(e) {
-            console.log('[Voice] always-on start error', e);
-            setVoiceText('認識開始エラー', false);
-            voiceAlwaysOn = false;
-            updateVoiceAlwaysBtn();
-        }
-    }
-
-    function stopAlwaysListening() {
-        if (!voiceAlwaysOn) return;
-        voiceAlwaysOn = false;
-        updateVoiceAlwaysBtn();
-        setVoiceText('', false);
-        try { recognition?.stop(); } catch(e) {}
-    }
-
-    function updateVoiceAlwaysBtn() {
-        const btn = document.getElementById('voice-always-btn');
-        if (!btn) return;
-        btn.textContent = voiceAlwaysOn ? '音声OFF' : '音声ON';
-        btn.classList.toggle('active', voiceAlwaysOn);
-    }
 
     function setVoiceText(text, isInterim) {
         const el = document.getElementById('voice-text');
@@ -10175,7 +10093,7 @@
         const result = findAndExecuteVoiceMove(parsed);
         if (result) {
             moveExecuted = true;
-            if (!voiceAlwaysOn) stopListening(); // 常時ONモードは onend が再起動を処理する
+            stopListening();
             setVoiceText(`${parsed.displayText} ✓`, false);
             if (parsed.isDrop) recordMove('drop', parsed.r, parsed.c, { pieceType: parsed.baseType });
             else recordMove('board', parsed.r, parsed.c, { fromR: result.fromR, fromC: result.fromC, promote: board[parsed.r][parsed.c].promoted });
@@ -10285,10 +10203,6 @@
         }
     }
 
-    // 常時音声認識ボタンのイベント
-    document.getElementById('voice-always-btn')?.addEventListener('click', () => {
-        if (voiceAlwaysOn) stopAlwaysListening(); else startAlwaysListening();
-    });
 
     // 手動テキスト入力のイベント
     const voiceInputEl  = document.getElementById('voice-input');
