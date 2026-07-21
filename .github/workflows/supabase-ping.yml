@@ -12,12 +12,22 @@ jobs:
     steps:
       - name: Ping Supabase
         run: |
+          # --retry で一時的なDNS障害・タイムアウトを吸収
+          # || true で curl の終了コードがスクリプトを即終了させないようにする
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://rmupcpezaodhkqorvuvc.supabase.co/rest/v1/" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            --max-time 30)
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 10 \
+            --retry-all-errors) || true
+
           echo "HTTP Status: $STATUS"
-          if [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]; then
+
+          if [ -z "$STATUS" ] || [ "$STATUS" = "000" ]; then
+            echo "Could not reach Supabase (network/DNS error). Will retry next week."
+            exit 0
+          elif [ "$STATUS" -ge 200 ] && [ "$STATUS" -lt 500 ]; then
             echo "Supabase is alive."
           else
             echo "Unexpected status: $STATUS"
